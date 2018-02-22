@@ -1,0 +1,6 @@
+_build
+deps
+*erlang.mk
+log
+mix.lock
+plugins
