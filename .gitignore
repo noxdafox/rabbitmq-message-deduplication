@@ -1,6 +1,6 @@
 _build
 deps
-*erlang.mk
+.erlang.mk
 log
 mix.lock
 plugins
