@@ -143,20 +143,18 @@ defmodule RabbitExchangeTypeMessageDeduplication do
   end
 
   # Whether to route the message or not.
-
+  #
   # Returns false if the message includes the header `x-deduplication-header`
-  # and its value is already present in the deduplication cache.
-
-  # true otherwise.
-
-  # If `x-deduplication-header` value is not present in the cache it is added.
+  # and its value is already present in the deduplication cache. true otherwise.
+  #
+  # If `x-deduplication-header` value is not present in the cache, it is added.
   defp route?(cache, message) do
     # x-deduplication-header specified but cache miss
     with headers when is_list(headers) <- message |> elem(2) |> elem(3),
          {_h, _t, key} <- List.keyfind(headers, "x-deduplication-header", 0),
          {:ok, false} <- Cachex.exists?(cache, key) do
 
-      # per message cache ttl
+      # Add message to the cache
       case List.keyfind(headers, "x-cache-ttl", 0) do
         {_h, _t, ttl} -> Cachex.put(cache, key, nil, ttl: ttl)
         nil -> Cachex.put(cache, key, nil)
