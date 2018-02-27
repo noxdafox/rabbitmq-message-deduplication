@@ -39,9 +39,9 @@ Extra arguments:
 Message deduplication
 ---------------------
 
-Add the `x-deduplication-header` header to the message. Its value will be tested against a cache of previously seen messages. If the header value is already present in the cache and has not expired, it will not be routed.
+Each message containing the `x-deduplication-header` header will not be routed if its value has been already submitted previously and has not expired.
 
-The optional header `x-cache-ttl` will override the default value provided during the exchange declaration.
+The optional header `x-cache-ttl` will override the default one if provided during the exchange declaration. This parameter controls for how many seconds to deduplicate the message. After the TTL expires, a new message with the same `x-deduplication-header` header will be routed again.
 
 License
 -------
