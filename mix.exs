@@ -20,15 +20,14 @@ defmodule RabbitExchangeTypeMessageDeduplication.Mixfile do
 
   def application do
     [
-      applications: [:cachex, :rabbit],
-      mod: {RabbitExchangeTypeMessageDeduplication, []},
+      applications: [:rabbit],
+      mod: {RabbitMQ.Supervisor, []},
       env: [exchange: "x-message-deduplication"],
     ]
   end
 
   defp deps(deps_dir) do
     [
-      {:cachex, "~> 3.0.0"},
       {
         :rabbit,
         path: Path.join(deps_dir, "rabbit"),
