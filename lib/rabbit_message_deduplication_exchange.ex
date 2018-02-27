@@ -1,8 +1,8 @@
-defmodule RabbitExchangeTypeMessageDeduplication do
-  use DynamicSupervisor
-
-  import Cachex.Spec
+defmodule RabbitMQ.ExchangeTypeMessageDeduplication do
   import Record, only: [defrecord: 2, extract: 2]
+
+  require RabbitMQ.Cache
+  require RabbitMQ.Supervisor
 
   alias :rabbit_misc, as: RabbitMisc
   alias :rabbit_router, as: RabbitRouter
@@ -34,14 +34,6 @@ defmodule RabbitExchangeTypeMessageDeduplication do
   defrecord :basic_message, extract(
     :basic_message, from_lib: "rabbit_common/include/rabbit.hrl")
 
-  def start(_type, args) do
-    DynamicSupervisor.start_link(__MODULE__, args, name: __MODULE__)
-  end
-
-  def init(_args) do
-    DynamicSupervisor.init(strategy: :one_for_one)
-  end
-
   def description() do
     [
       {:name, <<"x-message-deduplication">>},
@@ -63,13 +55,13 @@ defmodule RabbitExchangeTypeMessageDeduplication do
   end
 
   def validate(exchange(arguments: args)) do
-    case List.keyfind(args, "x-cache-limit", 0) do
-      {"x-cache-limit", :long, val} when val > 0 -> :ok
+    case List.keyfind(args, "x-cache-size", 0) do
+      {"x-cache-size", :long, val} when val > 0 -> :ok
       _ ->
         RabbitMisc.protocol_error(
           :precondition_failed,
           "Missing or invalid argument, \
-          'x-cache-limit' must be an integer greater than 0",
+          'x-cache-size' must be an integer greater than 0",
           [])
     end
 
@@ -89,28 +81,28 @@ defmodule RabbitExchangeTypeMessageDeduplication do
   end
 
   def create(_tx, exchange(name: name, arguments: args)) do
-    options = [limit: args |> List.keyfind("x-cache-limit", 0) |> elem(2)]
+    cache = cache_name(name)
+    size = args |> List.keyfind("x-cache-size", 0) |> elem(2)
     options = case List.keyfind(args, "x-cache-ttl", 0) do
-                {_h, _t, ttl} -> exp = expiration(default: :timer.seconds(ttl),
-                                                  interval: :timer.seconds(3),
-                                                  lazy: true)
-                                 [expiration: exp] ++ options
-                nil -> options
-              end
-
-    specifications = %{id: Cachex,
-                       start: {Cachex,
+      {_h, _t, ttl} -> [cache, size, ttl]
+      nil -> [cache, size]
+    end
+    specifications = %{id: cache,
+                       start: {RabbitMQ.Cache,
                                :start_link,
-                               [cache_name(name), options]}}
-    case DynamicSupervisor.start_child(__MODULE__, specifications) do
+                               options}}
+
+    case RabbitMQ.Supervisor.start_child(specifications) do
       {:ok, _} -> :ok
       {:error, {:already_started, _}} -> :ok
-      _ -> :error
     end
   end
 
   def delete(_tx, exchange(name: name), _bs) do
-    DynamicSupervisor.terminate_child(__MODULE__, name)
+    cache = cache_name(name)
+
+    {_, :ok} = RabbitMQ.Cache.drop(cache)
+    :ok = RabbitMQ.Supervisor.terminate_child(cache)
   end
 
   def policy_changed(_x1, _x2) do
@@ -137,34 +129,47 @@ defmodule RabbitExchangeTypeMessageDeduplication do
     []
   end
 
-  # Returns an atom composed by the resource and exchange name.
-  defp cache_name({:resource, resource, :exchange, exchange}) do
-    String.to_atom("#{resource}_#{exchange}")
-  end
+  # Utility functions
 
   # Whether to route the message or not.
+  defp route?(cache, message) do
+    case message_headers(message) do
+      headers when is_list(headers) -> not cached_message?(cache, headers)
+      :undefined -> true
+    end
+  end
+
+  # Returns true if the message includes the header `x-deduplication-header`
+  # and its value is already present in the deduplication cache.
   #
-  # Returns false if the message includes the header `x-deduplication-header`
-  # and its value is already present in the deduplication cache. true otherwise.
+  # false otherwise.
   #
   # If `x-deduplication-header` value is not present in the cache, it is added.
-  defp route?(cache, message) do
-    # x-deduplication-header specified but cache miss
-    with headers when is_list(headers) <- message |> elem(2) |> elem(3),
-         {_h, _t, key} <- List.keyfind(headers, "x-deduplication-header", 0),
-         {:ok, false} <- Cachex.exists?(cache, key) do
+  defp cached_message?(cache, headers) do
+    case List.keyfind(headers, "x-deduplication-header", 0) do
+      {_h, _t, key} ->
+        if RabbitMQ.Cache.member?(cache, key) do
+          true
+        else
+          # Add message to the cache
+          case List.keyfind(headers, "x-cache-ttl", 0) do
+            {_h, _t, ttl} -> RabbitMQ.Cache.put(cache, key, ttl)
+            nil -> RabbitMQ.Cache.put(cache, key)
+          end
 
-      # Add message to the cache
-      case List.keyfind(headers, "x-cache-ttl", 0) do
-        {_h, _t, ttl} -> Cachex.put(cache, key, nil, ttl: ttl)
-        nil -> Cachex.put(cache, key, nil)
-      end
-
-      true
-    else
-      {:ok, true} -> false  # cache hit
-      {:error, _} -> true   # FIXME: what to do on cache error?
-      _ -> true             # no x-deduplication-header
+          false
+        end
+      nil -> false
     end
+  end
+
+  # Unpacks the message headers
+  defp message_headers(message) do
+    message |> elem(2) |> elem(3)
+  end
+
+  # Returns an atom composed by the resource and exchange name.
+  defp cache_name({:resource, resource, :exchange, exchange}) do
+    String.to_atom("cache_#{resource}_#{exchange}")
   end
 end
