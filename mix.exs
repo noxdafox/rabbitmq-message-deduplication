@@ -19,8 +19,10 @@ defmodule RabbitExchangeTypeMessageDeduplication.Mixfile do
   end
 
   def application do
+    applications = if (Mix.env == :test), do: [], else: [:rabbit]
+
     [
-      applications: [:rabbit],
+      applications: applications,
       mod: {RabbitMQ.Supervisor, []},
       env: [exchange: "x-message-deduplication"],
     ]
@@ -57,6 +59,9 @@ defmodule RabbitExchangeTypeMessageDeduplication.Mixfile do
         "deps.compile",
         "compile",
       ],
+      make_tests: [
+        "test",
+      ]
     ]
   end
 end
