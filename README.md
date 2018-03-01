@@ -13,15 +13,15 @@ Please see RabbitMQ Plugin Development guide.
 To build the plugin:
 
 ```bash
-        git clone https://github.com/noxdafox/rabbitmq-message-deduplication.git
-        cd rabbitmq-message-deduplication
-        make
+    git clone https://github.com/noxdafox/rabbitmq-message-deduplication.git
+    cd rabbitmq-message-deduplication
+    make dist
 ```
 
 Then copy all the *.ez files inside the plugins folder to the RabbitMQ plugins directory and enable the plugin:
 
 ```bash
-        [sudo] rabbitmq-plugins enable rabbitmq_message_deduplication_exchange
+    [sudo] rabbitmq-plugins enable rabbitmq_message_deduplication_exchange
 ```
 
 Declare an exchange
@@ -43,7 +43,14 @@ Each message containing the `x-deduplication-header` header will not be routed i
 
 The optional header `x-cache-ttl` will override the default one if provided during the exchange declaration. This parameter controls for how many seconds to deduplicate the message. After the TTL expires, a new message with the same `x-deduplication-header` header will be routed again.
 
+Running the tests
+-----------------
+
+```bash
+    make tests
+```
+
 License
 -------
 
-See LICENSE.txt
+See the LICENSE file.
