@@ -16,6 +16,7 @@ defmodule RabbitMQ.Cache do
   require Record
 
   alias :os, as: Os
+  alias :timer, as: Timer
   alias :mnesia, as: Mnesia
 
   ## Client API
@@ -53,7 +54,7 @@ defmodule RabbitMQ.Cache do
   def init({cache, size, ttl}) do
     Mnesia.start()
 
-    cache_create(cache, size, ttl)
+    :ok = cache_create(cache, size, ttl)
 
     Process.send_after(cache, {:cache, cache}, 3)
 
@@ -77,15 +78,16 @@ defmodule RabbitMQ.Cache do
       true -> nil
     end
 
+    # Remove first element if full
+    size = Mnesia.table_info(cache, :size)
+    {:limit, limit} = cache_limit(cache)
+    if size >= limit do
+      cache_delete_first(cache)
+    end
+
     Mnesia.transaction(fn ->
       Mnesia.write({cache, value, expiration})
     end)
-
-    size = Mnesia.table_info(cache, :size)
-    {:limit, limit} = cache_limit(cache)
-    if size > limit do
-      cache_delete_first(cache)
-    end
 
     {:reply, :ok, state}
   end
@@ -101,13 +103,13 @@ defmodule RabbitMQ.Cache do
   ## Utility functions
 
   defp cache_create(cache, size, ttl) do
-    with {:atomic, :ok} <- Mnesia.create_table(cache,
-              [attributes: [:value, :expiration],
-               index: [:expiration],
-               user_properties: [limit: size, default_ttl: ttl]]),
-         {:atomic, :ok} <- Mnesia.add_table_copy(cache, node(), :ram_copies),
-         {:atomic, :ok} <- Mnesia.wait_for_tables([cache], :timer.seconds(30)),
-      do: :ok
+    Mnesia.create_table(cache,
+      [attributes: [:value, :expiration],
+       index: [:expiration],
+       user_properties: [limit: size, default_ttl: ttl]])
+    Mnesia.add_table_copy(cache, node(), :ram_copies)
+
+    Mnesia.wait_for_tables([cache], Timer.seconds(30))
   end
 
   defp cache_member?(cache, value) do
