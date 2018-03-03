@@ -5,6 +5,21 @@ A plugin for filtering duplicate messages.
 
 Exchange Type: `x-message-deduplication`
 
+Installing
+----------
+
+Supported RabbitMQ versions:
+
+ * \>= 3.7.0
+
+Download the .ez file from the latest [release](https://github.com/noxdafox/rabbitmq-message-deduplication/releases) and copy it in the [RabbitMQ plugins directory](http://www.rabbitmq.com/relocate.html).
+
+Enable the plugin:
+
+```bash
+    [sudo] rabbitmq-plugins enable rabbitmq_message_deduplication_exchange
+```
+
 Building from Source
 --------------------
 
@@ -18,7 +33,7 @@ To build the plugin:
     make dist
 ```
 
-Then copy all the *.ez files inside the plugins folder to the RabbitMQ plugins directory and enable the plugin:
+Then copy all the *.ez files inside the plugins folder to the [RabbitMQ plugins directory](http://www.rabbitmq.com/relocate.html) and enable the plugin:
 
 ```bash
     [sudo] rabbitmq-plugins enable rabbitmq_message_deduplication_exchange
