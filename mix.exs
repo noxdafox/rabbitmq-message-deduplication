@@ -19,7 +19,10 @@ defmodule RabbitExchangeTypeMessageDeduplication.Mixfile do
   end
 
   def application do
-    applications = if (Mix.env == :test), do: [], else: [:rabbit]
+    applications = case Mix.env do
+      :test -> []
+      _ -> [:rabbit]
+    end
 
     [
       applications: applications,
