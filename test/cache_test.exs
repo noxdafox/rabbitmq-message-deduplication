@@ -8,6 +8,11 @@ defmodule RabbitMQ.CacheTest do
     cache = :test_cache
     cache_ttl = :test_cache_ttl
 
+    on_exit fn ->
+      Mnesia.delete_table(cache)
+      Mnesia.delete_table(cache_ttl)
+    end
+
     start_supervised!(%{id: cache,
                         start: {RabbitMQ.Cache,
                                 :start_link,
@@ -25,8 +30,6 @@ defmodule RabbitMQ.CacheTest do
 
     RabbitMQ.Cache.put(cache, "foo")
     assert RabbitMQ.Cache.member?(cache, "foo") == true
-
-    RabbitMQ.Cache.drop(cache)
   end
 
   test "TTL at insertion", %{cache: cache, cache_ttl: _} do
@@ -38,8 +41,6 @@ defmodule RabbitMQ.CacheTest do
     1 |> Timer.seconds() |> Timer.sleep()
 
     assert RabbitMQ.Cache.member?(cache, "foo") == false
-
-    RabbitMQ.Cache.drop(cache)
   end
 
   test "TTL at table creation", %{cache: _, cache_ttl: cache} do
@@ -51,8 +52,6 @@ defmodule RabbitMQ.CacheTest do
     1 |> Timer.seconds() |> Timer.sleep()
 
     assert RabbitMQ.Cache.member?(cache, "foo") == false
-
-    RabbitMQ.Cache.drop(cache)
   end
 
   test "entries are deleted if cache is full", %{cache: cache, cache_ttl: _} do
@@ -65,12 +64,10 @@ defmodule RabbitMQ.CacheTest do
     assert RabbitMQ.Cache.member?(cache, "bar") == true
 
     assert RabbitMQ.Cache.member?(cache, "foo") == false
-
-    RabbitMQ.Cache.drop(cache)
   end
 
   test "drop the cache", %{cache: cache, cache_ttl: _} do
-    RabbitMQ.Cache.drop(cache)
+    {:atomic, :ok} = RabbitMQ.Cache.drop(cache)
 
     assert Enum.member?(Mnesia.system_info(:tables), cache) == false
   end
