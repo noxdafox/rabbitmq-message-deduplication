@@ -12,7 +12,7 @@ Supported RabbitMQ versions:
 
  * \>= 3.7.0
 
-Download the .ez file from the latest [release](https://github.com/noxdafox/rabbitmq-message-deduplication/releases) and copy it in the [RabbitMQ plugins directory](http://www.rabbitmq.com/relocate.html).
+Download the .ez files from the latest [release](https://github.com/noxdafox/rabbitmq-message-deduplication/releases) and copy them in the [RabbitMQ plugins directory](http://www.rabbitmq.com/relocate.html).
 
 Enable the plugin:
 
