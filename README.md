@@ -50,6 +50,8 @@ Extra arguments:
     This parameter is mandatory.
   * `x-cache-ttl`: amount of time in seconds messages are kept in cache.
     This parameter is optional.
+  * `x-cache-persistence`: whether the cache will persist on disk or in memory.
+    This parameter is optional. Default persistence is memory.
 
 Message deduplication
 ---------------------
