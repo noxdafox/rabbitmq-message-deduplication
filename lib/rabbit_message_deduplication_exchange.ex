@@ -179,9 +179,19 @@ defmodule RabbitMQ.ExchangeTypeMessageDeduplication do
     message |> elem(2) |> elem(3)
   end
 
-  # Returns an atom composed by the resource and exchange name
+  # Returns a sanitized atom composed by the resource and exchange name
   defp cache_name({:resource, resource, :exchange, exchange}) do
-    resource = String.replace(resource, "/", "")
+    resource =
+      resource
+      |> String.replace(~r/[-\. ]/, "_")
+      |> String.replace("/", "")
+      |> String.downcase()
+    exchange =
+      exchange
+      |> String.replace(~r/[-\. ]/, "_")
+      |> String.replace("/", "")
+      |> String.downcase()
+
     String.to_atom("cache_#{resource}_#{exchange}")
   end
 
