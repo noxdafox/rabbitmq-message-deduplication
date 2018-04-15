@@ -52,18 +52,18 @@ defmodule RabbitExchangeTypeMessageDeduplication.Mixfile do
     [
       make_deps: [
         "deps.get",
-        "deps.compile",
+        "deps.compile"
       ],
       make_app: [
-        "compile",
+        "compile"
       ],
       make_all: [
         "deps.get",
         "deps.compile",
-        "compile",
+        "compile"
       ],
       make_tests: [
-        "test",
+        "test"
       ]
     ]
   end
