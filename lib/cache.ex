@@ -56,7 +56,7 @@ defmodule RabbitMQ.Cache do
 
     :ok = cache_create(cache, options)
 
-    Process.send_after(cache, {:cache, cache}, 3)
+    Process.send_after(cache, {:cache, cache}, 3000)
 
     {:ok, %{}}
   end
@@ -64,7 +64,7 @@ defmodule RabbitMQ.Cache do
   def handle_info({:cache, cache}, state) do
     {_, result} = cache_delete_expired(cache)
     if (result == :ok) do
-      Process.send_after(cache, {:cache, cache}, 3)
+      Process.send_after(cache, {:cache, cache}, 3000)
     end
 
     {:noreply, state}
