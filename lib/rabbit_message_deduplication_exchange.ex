@@ -74,6 +74,17 @@ defmodule RabbitMQ.ExchangeTypeMessageDeduplication do
              'x-cache-ttl' must be an integer greater than 0",
              [])
     end
+
+    case List.keyfind(args, "x-cache-persistence", 0) do
+      nil -> :ok
+      {"x-cache-persistence", :longstr, "disk"} -> :ok
+      {"x-cache-persistence", :longstr, "memory"} -> :ok
+      _ -> RabbitMisc.protocol_error(
+             :precondition_failed,
+             "Invalid argument, \
+             'x-cache-persistence' must be either 'disk' or 'memory'",
+             [])
+    end
   end
 
   def validate_binding(_ex, _bs) do
@@ -82,15 +93,15 @@ defmodule RabbitMQ.ExchangeTypeMessageDeduplication do
 
   def create(_tx, exchange(name: name, arguments: args)) do
     cache = cache_name(name)
-    size = args |> List.keyfind("x-cache-size", 0) |> elem(2)
-    options = case List.keyfind(args, "x-cache-ttl", 0) do
-      {_h, _t, ttl} -> [cache, size, ttl]
-      nil -> [cache, size]
-    end
+    ttl = rabbitmq_keyfind(args, "x-cache-ttl")
+    size = rabbitmq_keyfind(args, "x-cache-size")
+    persistence =
+      args
+      |> rabbitmq_keyfind("x-cache-persistence", "memory")
+      |> String.to_atom()
+    options = [size: size, ttl: ttl, persistence: persistence]
     specifications = %{id: cache,
-                       start: {RabbitMQ.Cache,
-                               :start_link,
-                               options}}
+                       start: {RabbitMQ.Cache, :start_link, [cache, options]}}
 
     case RabbitMQ.Supervisor.start_child(specifications) do
       {:ok, _} -> :ok
@@ -146,20 +157,20 @@ defmodule RabbitMQ.ExchangeTypeMessageDeduplication do
   #
   # If `x-deduplication-header` value is not present in the cache, it is added.
   defp cached_message?(cache, headers) do
-    case List.keyfind(headers, "x-deduplication-header", 0) do
-      {_h, _t, key} ->
+    case rabbitmq_keyfind(headers, "x-deduplication-header") do
+      nil -> false
+      key ->
         if RabbitMQ.Cache.member?(cache, key) do
           true
         else
           # Add message to the cache
-          case List.keyfind(headers, "x-cache-ttl", 0) do
-            {_h, _t, ttl} -> RabbitMQ.Cache.put(cache, key, ttl)
+          case rabbitmq_keyfind(headers, "x-cache-ttl") do
             nil -> RabbitMQ.Cache.put(cache, key)
+            ttl -> RabbitMQ.Cache.put(cache, key, ttl)
           end
 
           false
         end
-      nil -> false
     end
   end
 
@@ -168,8 +179,17 @@ defmodule RabbitMQ.ExchangeTypeMessageDeduplication do
     message |> elem(2) |> elem(3)
   end
 
-  # Returns an atom composed by the resource and exchange name.
+  # Returns an atom composed by the resource and exchange name
   defp cache_name({:resource, resource, :exchange, exchange}) do
+    resource = String.replace(resource, "/", "")
     String.to_atom("cache_#{resource}_#{exchange}")
+  end
+
+  # Returns the value given a key from a RabbitMQ list [{"key", :type, value}]
+  defp rabbitmq_keyfind(list, key, default \\ nil) do
+    case List.keyfind(list, key, 0) do
+      {_key, _type, value} -> value
+      _ -> default
+    end
   end
 end

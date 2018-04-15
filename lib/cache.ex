@@ -24,8 +24,8 @@ defmodule RabbitMQ.Cache do
   @doc """
   Create a new cache and start it.
   """
-  def start_link(cache, size, ttl \\ nil) do
-    GenServer.start_link(__MODULE__, {cache, size, ttl}, name: cache)
+  def start_link(cache, options) do
+    GenServer.start_link(__MODULE__, {cache, options}, name: cache)
   end
 
   @doc """
@@ -51,10 +51,10 @@ defmodule RabbitMQ.Cache do
 
   ## Server Callbacks
 
-  def init({cache, size, ttl}) do
+  def init({cache, options}) do
     Mnesia.start()
 
-    :ok = cache_create(cache, size, ttl)
+    :ok = cache_create(cache, options)
 
     Process.send_after(cache, {:cache, cache}, 3)
 
@@ -78,7 +78,7 @@ defmodule RabbitMQ.Cache do
       true -> nil
     end
 
-    # Remove first element if full
+    # Remove first element if cache is full
     size = Mnesia.table_info(cache, :size)
     {:limit, limit} = cache_limit(cache)
     if size >= limit do
@@ -102,13 +102,19 @@ defmodule RabbitMQ.Cache do
 
   ## Utility functions
 
-  defp cache_create(cache, size, ttl) do
-    Mnesia.create_table(cache,
-      [attributes: [:value, :expiration],
-       index: [:expiration],
-       user_properties: [limit: size, default_ttl: ttl]])
-    Mnesia.add_table_copy(cache, node(), :ram_copies)
+  defp cache_create(cache, options) do
+    persistence = case Keyword.get(options, :persistence) do
+                    :disk -> :disc_copies
+                    :memory -> :ram_copies
+                  end
+    options = [{:attributes, [:value, :expiration]},
+               {persistence, [node()]},
+               {:index, [:expiration]},
+               {:user_properties, [{:limit, Keyword.get(options, :size)},
+                                   {:default_ttl, Keyword.get(options, :ttl)}]}]
 
+    Mnesia.create_table(cache, options)
+    Mnesia.add_table_copy(cache, node(), persistence)
     Mnesia.wait_for_tables([cache], Timer.seconds(30))
   end
 
