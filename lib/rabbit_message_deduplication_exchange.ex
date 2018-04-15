@@ -112,8 +112,13 @@ defmodule RabbitMQ.ExchangeTypeMessageDeduplication do
   def delete(_tx, exchange(name: name), _bs) do
     cache = cache_name(name)
 
-    {_, :ok} = RabbitMQ.Cache.drop(cache)
-    :ok = RabbitMQ.Supervisor.terminate_child(cache)
+    # It seems the deletion request comes duplicated
+    case RabbitMQ.Cache.process(cache) do
+      pid when is_pid(pid) ->
+        :ok = RabbitMQ.Cache.drop(cache)
+        RabbitMQ.Supervisor.terminate_child(pid)
+      nil -> :ok
+    end
   end
 
   def policy_changed(_x1, _x2) do

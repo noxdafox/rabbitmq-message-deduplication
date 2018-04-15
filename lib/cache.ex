@@ -49,6 +49,13 @@ defmodule RabbitMQ.Cache do
     GenServer.call(cache, {:drop, cache})
   end
 
+  @doc """
+  Return the PID of the given cache, nil if non existing.
+  """
+  def process(cache) do
+    GenServer.whereis(cache)
+  end
+
   ## Server Callbacks
 
   def init({cache, options}) do
@@ -97,7 +104,10 @@ defmodule RabbitMQ.Cache do
   end
 
   def handle_call({:drop, cache}, _from, state) do
-    {:reply, Mnesia.delete_table(cache), state}
+    case Mnesia.delete_table(cache) do
+      {:atomic, :ok} -> {:reply, :ok, state}
+      _ -> {:reply, :error, state}
+    end
   end
 
   ## Utility functions
