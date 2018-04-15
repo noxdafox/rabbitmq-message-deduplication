@@ -70,7 +70,7 @@ defmodule RabbitMQ.CacheTest do
   end
 
   test "drop the cache", %{cache: cache, cache_ttl: _} do
-    {:atomic, :ok} = RabbitMQ.Cache.drop(cache)
+    :ok = RabbitMQ.Cache.drop(cache)
 
     assert Enum.member?(Mnesia.system_info(:tables), cache) == false
   end
