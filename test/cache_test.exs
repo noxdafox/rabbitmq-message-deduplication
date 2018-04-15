@@ -13,14 +13,17 @@ defmodule RabbitMQ.CacheTest do
       Mnesia.delete_table(cache_ttl)
     end
 
+    cache_options = [size: 1, ttl: nil, persistence: :memory]
+    cache_ttl_options = [size: 1, ttl: 1, persistence: :memory]
+
     start_supervised!(%{id: cache,
                         start: {RabbitMQ.Cache,
                                 :start_link,
-                                [cache, 1]}})
+                                [cache, cache_options]}})
     start_supervised!(%{id: cache_ttl,
                         start: {RabbitMQ.Cache,
                                 :start_link,
-                                [cache_ttl, 1, 1]}})
+                                [cache_ttl, cache_ttl_options]}})
 
     %{cache: cache, cache_ttl: cache_ttl}
   end
