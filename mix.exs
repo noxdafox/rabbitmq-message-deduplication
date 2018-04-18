@@ -25,8 +25,8 @@ defmodule RabbitExchangeTypeMessageDeduplication.Mixfile do
     end
 
     [
+      mod: [],
       applications: applications,
-      mod: {RabbitMQ.Supervisor, []},
       env: [exchange: "x-message-deduplication"],
     ]
   end
