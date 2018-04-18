@@ -2,7 +2,7 @@ defmodule RabbitMQ.ExchangeTypeMessageDeduplication do
   import Record, only: [defrecord: 2, extract: 2]
 
   require RabbitMQ.Cache
-  require RabbitMQ.Supervisor
+  require RabbitMQ.CacheSupervisor
 
   alias :rabbit_misc, as: RabbitMisc
   alias :rabbit_router, as: RabbitRouter
@@ -22,6 +22,13 @@ defmodule RabbitMQ.ExchangeTypeMessageDeduplication do
                       {:requires, :rabbit_registry},
                       {:enables, :kernel_ready}]}
 
+  @rabbit_boot_step {:rabbit_exchange_type_caches_supervisor,
+                     [{:description,
+                       "message deduplication exchange type: supervisor"},
+                      {:mfa, {__MODULE__, :start_caches_supervisor, []}},
+                      {:requires, :rabbit_registry},
+                      {:enables, :kernel_ready}]}
+
   defrecord :exchange, extract(
     :exchange, from_lib: "rabbit_common/include/rabbit.hrl")
 
@@ -33,6 +40,10 @@ defmodule RabbitMQ.ExchangeTypeMessageDeduplication do
 
   defrecord :basic_message, extract(
     :basic_message, from_lib: "rabbit_common/include/rabbit.hrl")
+
+  def start_caches_supervisor() do
+    RabbitMQ.CacheSupervisor.start_link()
+  end
 
   def description() do
     [
@@ -100,13 +111,8 @@ defmodule RabbitMQ.ExchangeTypeMessageDeduplication do
       |> rabbitmq_keyfind("x-cache-persistence", "memory")
       |> String.to_atom()
     options = [size: size, ttl: ttl, persistence: persistence]
-    specifications = %{id: cache,
-                       start: {RabbitMQ.Cache, :start_link, [cache, options]}}
 
-    case RabbitMQ.Supervisor.start_child(specifications) do
-      {:ok, _} -> :ok
-      {:error, {:already_started, _}} -> :ok
-    end
+    RabbitMQ.CacheSupervisor.start_cache(cache, options)
   end
 
   def create(:none, _ex) do
@@ -117,7 +123,8 @@ defmodule RabbitMQ.ExchangeTypeMessageDeduplication do
     cache = cache_name(name)
 
     :ok = RabbitMQ.Cache.drop(cache)
-    cache |> RabbitMQ.Cache.process() |> RabbitMQ.Supervisor.terminate_child()
+
+    RabbitMQ.CacheSupervisor.stop_cache(cache)
   end
 
   def delete(:none, _ex, _bs) do
