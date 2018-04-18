@@ -91,7 +91,7 @@ defmodule RabbitMQ.ExchangeTypeMessageDeduplication do
     :ok
   end
 
-  def create(_tx, exchange(name: name, arguments: args)) do
+  def create(:transaction, exchange(name: name, arguments: args)) do
     cache = cache_name(name)
     ttl = rabbitmq_keyfind(args, "x-cache-ttl")
     size = rabbitmq_keyfind(args, "x-cache-size")
@@ -109,16 +109,19 @@ defmodule RabbitMQ.ExchangeTypeMessageDeduplication do
     end
   end
 
-  def delete(_tx, exchange(name: name), _bs) do
+  def create(:none, _ex) do
+    :ok
+  end
+
+  def delete(:transaction, exchange(name: name), _bs) do
     cache = cache_name(name)
 
-    # It seems the deletion request comes duplicated
-    case RabbitMQ.Cache.process(cache) do
-      pid when is_pid(pid) ->
-        :ok = RabbitMQ.Cache.drop(cache)
-        RabbitMQ.Supervisor.terminate_child(pid)
-      nil -> :ok
-    end
+    :ok = RabbitMQ.Cache.drop(cache)
+    cache |> RabbitMQ.Cache.process() |> RabbitMQ.Supervisor.terminate_child()
+  end
+
+  def delete(:none, _ex, _bs) do
+    :ok
   end
 
   def policy_changed(_x1, _x2) do
