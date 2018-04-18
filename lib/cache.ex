@@ -5,8 +5,8 @@ defmodule RabbitMQ.Cache do
   Values can be stored within the cache with a given TTL.
   After the TTL expires the values will be transparently removed.
 
-  The cache does not implement a LRU mechanism due to Mnesia API limitations.
-  An LRU mechanism could be implemented using ordered_sets
+  The cache does not implement a FIFO mechanism due to Mnesia API limitations.
+  An FIFO mechanism could be implemented using ordered_sets
   but performance should be evaluated.
 
   """
