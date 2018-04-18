@@ -20,8 +20,8 @@ defmodule RabbitExchangeTypeMessageDeduplication.Mixfile do
 
   def application do
     applications = case Mix.env do
-      :test -> []
-      _ -> [:rabbit]
+      :test -> [:mnesia]
+      _ -> [:rabbit, :mnesia]
     end
 
     [
