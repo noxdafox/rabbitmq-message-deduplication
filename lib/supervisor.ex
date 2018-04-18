@@ -1,16 +1,28 @@
-defmodule RabbitMQ.Supervisor do
+defmodule RabbitMQ.CacheSupervisor do
   use DynamicSupervisor
 
-  def start(_type, args) do
-    DynamicSupervisor.start_link(__MODULE__, args, name: __MODULE__)
+  require RabbitMQ.Cache
+
+  def start_link() do
+    case DynamicSupervisor.start_link(__MODULE__, [], name: __MODULE__) do
+      {:ok, _pid} -> :ok
+      _ -> :error
+    end
   end
 
-  def start_child(spec) do
-    DynamicSupervisor.start_child(__MODULE__, spec)
+  def start_cache(cache, options) do
+    specifications = %{id: cache,
+                       start: {RabbitMQ.Cache, :start_link, [cache, options]}}
+
+    case DynamicSupervisor.start_child(__MODULE__, specifications) do
+      {:ok, _} -> :ok
+      {:error, {:already_started, _}} -> :ok
+      _ -> :error
+    end
   end
 
-  def terminate_child(name) do
-    DynamicSupervisor.terminate_child(__MODULE__, name)
+  def stop_cache(cache) do
+    DynamicSupervisor.terminate_child(__MODULE__, RabbitMQ.Cache.process(cache))
   end
 
   def init(_args) do
