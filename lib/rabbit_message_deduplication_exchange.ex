@@ -160,7 +160,7 @@ defmodule RabbitMQ.ExchangeTypeMessageDeduplication do
   # Whether to route the message or not.
   defp route?(cache, message) do
     case message_headers(message) do
-      headers when is_list(headers) -> not cached_message?(cache, headers)
+      headers when is_list(headers) -> not cached?(cache, headers)
       :undefined -> true
     end
   end
@@ -171,7 +171,7 @@ defmodule RabbitMQ.ExchangeTypeMessageDeduplication do
   # false otherwise.
   #
   # If `x-deduplication-header` value is not present in the cache, it is added.
-  defp cached_message?(cache, headers) do
+  defp cached?(cache, headers) do
     case rabbitmq_keyfind(headers, "x-deduplication-header") do
       nil -> false
       key ->
@@ -189,23 +189,10 @@ defmodule RabbitMQ.ExchangeTypeMessageDeduplication do
     end
   end
 
-  # Unpacks the message headers
-  defp message_headers(message) do
-    message |> elem(2) |> elem(3)
-  end
-
   # Returns a sanitized atom composed by the resource and exchange name
   defp cache_name({:resource, resource, :exchange, exchange}) do
-    resource =
-      resource
-      |> String.replace(~r/[-\. ]/, "_")
-      |> String.replace("/", "")
-      |> String.downcase()
-    exchange =
-      exchange
-      |> String.replace(~r/[-\. ]/, "_")
-      |> String.replace("/", "")
-      |> String.downcase()
+    resource = sanitize_string(resource)
+    exchange = sanitize_string(exchange)
 
     String.to_atom("cache_#{resource}_#{exchange}")
   end
@@ -216,5 +203,17 @@ defmodule RabbitMQ.ExchangeTypeMessageDeduplication do
       {_key, _type, value} -> value
       _ -> default
     end
+  end
+
+  # Unpacks the message headers
+  defp message_headers(message) do
+    message |> elem(2) |> elem(3)
+  end
+
+  defp sanitize_string(string) do
+    string
+    |> String.replace(~r/[-\. ]/, "_")
+    |> String.replace("/", "")
+    |> String.downcase()
   end
 end

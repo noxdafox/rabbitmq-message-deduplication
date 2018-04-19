@@ -13,8 +13,6 @@ defmodule RabbitMQ.Cache do
 
   use GenServer
 
-  require Record
-
   alias :os, as: Os
   alias :timer, as: Timer
   alias :mnesia, as: Mnesia
@@ -49,60 +47,49 @@ defmodule RabbitMQ.Cache do
     GenServer.call(cache, {:drop, cache})
   end
 
-  @doc """
-  Return the PID of the given cache, nil if non existing.
-  """
-  def process(cache) do
-    GenServer.whereis(cache)
-  end
-
   ## Server Callbacks
 
+  # Creates the Mnesia table and starts the janitor process.
   def init({cache, options}) do
     Mnesia.start()
 
     :ok = cache_create(cache, options)
 
-    Process.send_after(cache, {:cache, cache}, 3000)
+    Process.send_after(cache, {:cache, cache}, Timer.seconds(3))
 
     {:ok, %{}}
   end
 
+  # The janitor process deletes expired cache entries.
   def handle_info({:cache, cache}, state) do
     {_, result} = cache_delete_expired(cache)
     if (result == :ok) do
-      Process.send_after(cache, {:cache, cache}, 3000)
+      Process.send_after(cache, {:cache, cache}, Timer.seconds(3))
     end
 
     {:noreply, state}
   end
 
+  # Puts a new entry in the cache.
+  # If the cache is full, remove an element to make space.
   def handle_call({:put, cache, value, ttl}, _from, state) do
-    {:default_ttl, default_ttl} = cache_default_ttl(cache)
-    expiration = cond do
-      ttl != nil -> Os.system_time(:seconds) + ttl
-      default_ttl != nil -> Os.system_time(:seconds) + default_ttl
-      true -> nil
-    end
-
-    # Remove first element if cache is full
-    size = Mnesia.table_info(cache, :size)
-    {:limit, limit} = cache_limit(cache)
-    if size >= limit do
+    if cache_full?(cache) do
       cache_delete_first(cache)
     end
 
     Mnesia.transaction(fn ->
-      Mnesia.write({cache, value, expiration})
+      Mnesia.write({cache, value, entry_expiration(cache, ttl)})
     end)
 
     {:reply, :ok, state}
   end
 
+  # True if the value is in the cache.
   def handle_call({:member?, cache, value}, _from, state) do
     {:reply, cache_member?(cache, value), state}
   end
 
+  # Drop the Mnesia cache table.
   def handle_call({:drop, cache}, _from, state) do
     case Mnesia.delete_table(cache) do
       {:atomic, :ok} -> {:reply, :ok, state}
@@ -112,6 +99,7 @@ defmodule RabbitMQ.Cache do
 
   ## Utility functions
 
+  # Mnesia cache table creation.
   defp cache_create(cache, options) do
     persistence = case Keyword.get(options, :persistence) do
                     :disk -> :disc_copies
@@ -128,6 +116,7 @@ defmodule RabbitMQ.Cache do
     Mnesia.wait_for_tables([cache], Timer.seconds(30))
   end
 
+  # Mnesia cache lookup. The entry is not returned if expired.
   defp cache_member?(cache, value) do
     {:atomic, entries} = Mnesia.transaction(fn -> Mnesia.read(cache, value) end)
 
@@ -137,6 +126,7 @@ defmodule RabbitMQ.Cache do
     end
   end
 
+  # Remove all expired entries from the Mnesia cache.
   defp cache_delete_expired(cache) do
     select = fn ->
       Mnesia.select(cache, [{{cache, :"$1", :_, :"$3"},
@@ -154,20 +144,33 @@ defmodule RabbitMQ.Cache do
     end
   end
 
+  # Delete the first element from the cache.
+  # As the Mnesia Set is not ordered, the first element is random.
   defp cache_delete_first(cache) do
-    Mnesia.transaction(
-      fn ->
-        Mnesia.delete({cache, Mnesia.first(cache)})
-      end)
+    Mnesia.transaction(fn -> Mnesia.delete({cache, Mnesia.first(cache)}) end)
   end
 
-  defp cache_limit(cache) do
-    Enum.find(Mnesia.table_info(cache, :user_properties),
-      fn(element) -> match?({:limit, _}, element) end)
+  defp cache_full?(cache) do
+    Mnesia.table_info(cache, :size) >= cache_property(cache, :limit)
   end
 
-  defp cache_default_ttl(cache) do
-    Enum.find(Mnesia.table_info(cache, :user_properties),
-      fn(element) -> match?({:default_ttl, _}, element) end)
+  # Calculate the expiration given a TTL or the cache default TTL
+  defp entry_expiration(cache, ttl) do
+    default = cache_property(cache, :default_ttl)
+
+    cond do
+      ttl != nil -> Os.system_time(:seconds) + ttl
+      default != nil -> Os.system_time(:seconds) + default
+      true -> nil
+    end
+  end
+
+  defp cache_property(cache, property) do
+    {^property, value} =
+      cache
+      |> Mnesia.table_info(:user_properties)
+      |> Enum.find(fn(element) -> match?({^property, _}, element) end)
+
+    value
   end
 end
