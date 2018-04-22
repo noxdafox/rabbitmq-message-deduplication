@@ -154,11 +154,15 @@ defmodule RabbitMQ.MessageDeduplicationExchangeType do
     RabbitExchange.assert_args_equivalence(exchange, args)
   end
 
-  def info(_x) do
-    []
+  def info(exchange) do
+    info(exchange, [:cache_info])
   end
 
-  def info(_x, _y) do
+  def info(exchange(name: name), [:cache_info]) do
+    [cache_info: name |> cache_name() |> RabbitMQ.Cache.info()]
+  end
+
+  def info(_ex, _it) do
     []
   end
 
