@@ -1,6 +1,6 @@
 defmodule RabbitMQ.CacheSupervisor do
   @moduledoc """
-  The Cache Supervisor supervisions the Cache GenServer Processes.
+  The Cache Supervisor supervises the Cache GenServer Processes.
   """
 
   use DynamicSupervisor

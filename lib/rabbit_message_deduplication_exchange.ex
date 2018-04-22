@@ -1,4 +1,4 @@
-defmodule RabbitMQ.ExchangeTypeMessageDeduplication do
+defmodule RabbitMQ.MessageDeduplicationExchangeType do
   import Record, only: [defrecord: 2, extract: 2]
 
   require RabbitMQ.Cache
@@ -26,8 +26,8 @@ defmodule RabbitMQ.ExchangeTypeMessageDeduplication do
                      [{:description,
                        "message deduplication exchange type: supervisor"},
                       {:mfa, {__MODULE__, :start_caches_supervisor, []}},
-                      {:requires, :rabbit_registry},
-                      {:enables, :kernel_ready}]}
+                      {:requires, :database},
+                      {:enables, :external_infrastructure}]}
 
   defrecord :exchange, extract(
     :exchange, from_lib: "rabbit_common/include/rabbit.hrl")
@@ -58,10 +58,9 @@ defmodule RabbitMQ.ExchangeTypeMessageDeduplication do
 
   def route(exchange(name: name),
       delivery(message: basic_message(content: content))) do
-    if route?(cache_name(name), content) do
-      RabbitRouter.match_routing_key(name, [:_])
-    else
-      []
+    case route?(cache_name(name), content) do
+      true -> RabbitRouter.match_routing_key(name, [:_])
+      false -> []
     end
   end
 
@@ -174,18 +173,19 @@ defmodule RabbitMQ.ExchangeTypeMessageDeduplication do
   defp cached?(cache, headers) do
     case rabbitmq_keyfind(headers, "x-deduplication-header") do
       nil -> false
-      key ->
-        if RabbitMQ.Cache.member?(cache, key) do
-          true
-        else
-          # Add message to the cache
-          case rabbitmq_keyfind(headers, "x-cache-ttl") do
-            nil -> RabbitMQ.Cache.put(cache, key)
-            ttl -> RabbitMQ.Cache.put(cache, key, ttl)
-          end
+      key -> case RabbitMQ.Cache.member?(cache, key) do
+               true -> true
+               false -> cache_put(cache, key, headers)
+                        false
+             end
+    end
+  end
 
-          false
-        end
+  # Puts the key and related headers in the cache
+  defp cache_put(cache, key, headers) do
+    case rabbitmq_keyfind(headers, "x-cache-ttl") do
+      nil -> RabbitMQ.Cache.put(cache, key)
+      ttl -> RabbitMQ.Cache.put(cache, key, ttl)
     end
   end
 
