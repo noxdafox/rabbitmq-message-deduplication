@@ -9,8 +9,8 @@
 defmodule RabbitMQ.MessageDeduplicationExchangeType do
   import Record, only: [defrecord: 2, extract: 2]
 
-  require RabbitMQ.Cache
-  require RabbitMQ.CacheSupervisor
+  require RabbitMQ.MessageDeduplicationPlugin.Cache
+  require RabbitMQ.MessageDeduplicationPlugin.Supervisor
 
   alias :rabbit_misc, as: RabbitMisc
   alias :rabbit_router, as: RabbitRouter

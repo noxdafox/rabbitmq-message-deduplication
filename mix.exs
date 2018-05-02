@@ -1,4 +1,4 @@
-defmodule RabbitExchangeTypeMessageDeduplication.Mixfile do
+defmodule RabbitMQ.MessageDeduplicationPlugin.Mixfile do
   use Mix.Project
 
   def project do
@@ -8,7 +8,7 @@ defmodule RabbitExchangeTypeMessageDeduplication.Mixfile do
     end
 
     [
-      app: :rabbitmq_message_deduplication_exchange,
+      app: :rabbitmq_message_deduplication,
       version: "0.1.1",
       build_embedded: Mix.env == :prod,
       start_permanent: Mix.env == :prod,
@@ -25,9 +25,7 @@ defmodule RabbitExchangeTypeMessageDeduplication.Mixfile do
     end
 
     [
-      mod: [],
       applications: applications,
-      env: [exchange: "x-message-deduplication"],
     ]
   end
 

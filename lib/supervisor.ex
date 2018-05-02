@@ -6,7 +6,7 @@
 # All rights reserved.
 
 
-defmodule RabbitMQ.CacheSupervisor do
+defmodule RabbitMQ.MessageDeduplicationPlugin.Supervisor do
   @moduledoc """
   The Cache Supervisor supervises the Cache GenServer Processes.
   """

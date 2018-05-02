@@ -6,7 +6,7 @@
 # All rights reserved.
 
 
-defmodule RabbitMQ.Cache do
+defmodule RabbitMQ.MessageDeduplicationPlugin.Cache do
   @moduledoc """
   Simple cache implemented on top of Mnesia.
 
