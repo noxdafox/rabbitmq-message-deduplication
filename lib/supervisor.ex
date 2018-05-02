@@ -13,6 +13,17 @@ defmodule RabbitMQ.CacheSupervisor do
 
   use DynamicSupervisor
 
+  Module.register_attribute __MODULE__,
+    :rabbit_boot_step,
+    accumulate: true, persist: true
+
+  @rabbit_boot_step {__MODULE__,
+                     [{:description,
+                       "message deduplication plugin cache supervisor"},
+                      {:mfa, {__MODULE__, :start_link, []}},
+                      {:requires, :database},
+                      {:enables, :external_infrastructure}]}
+
   @doc """
   Start the Supervisor process.
   """

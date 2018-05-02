@@ -30,13 +30,6 @@ defmodule RabbitMQ.MessageDeduplicationExchangeType do
                       {:requires, :rabbit_registry},
                       {:enables, :kernel_ready}]}
 
-  @rabbit_boot_step {:rabbit_exchange_type_caches_supervisor,
-                     [{:description,
-                       "message deduplication exchange type: supervisor"},
-                      {:mfa, {__MODULE__, :start_caches_supervisor, []}},
-                      {:requires, :database},
-                      {:enables, :external_infrastructure}]}
-
   defrecord :exchange, extract(
     :exchange, from_lib: "rabbit_common/include/rabbit.hrl")
 
@@ -48,10 +41,6 @@ defmodule RabbitMQ.MessageDeduplicationExchangeType do
 
   defrecord :basic_message, extract(
     :basic_message, from_lib: "rabbit_common/include/rabbit.hrl")
-
-  def start_caches_supervisor() do
-    RabbitMQ.CacheSupervisor.start_link()
-  end
 
   def description() do
     [
