@@ -56,6 +56,13 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.Cache do
   end
 
   @doc """
+  Flush the cache content.
+  """
+  def flush(cache) do
+    GenServer.call(cache, {:flush, cache})
+  end
+
+  @doc """
   Drop the cache with all its content.
   """
   def drop(cache) do
@@ -111,6 +118,14 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.Cache do
   # True if the value is in the cache.
   def handle_call({:member?, cache, value}, _from, state) do
     {:reply, cache_member?(cache, value), state}
+  end
+
+  # Flush the Mnesia cache table.
+  def handle_call({:flush, cache}, _from, state) do
+    case Mnesia.clear_table(cache) do
+      {:atomic, :ok} -> {:reply, :ok, state}
+      _ -> {:reply, :error, state}
+    end
   end
 
   # Drop the Mnesia cache table.
