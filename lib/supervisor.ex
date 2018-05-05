@@ -39,7 +39,8 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.Supervisor do
   """
   def start_cache(cache, options) do
     specifications = %{id: cache,
-                       start: {RabbitMQ.Cache, :start_link, [cache, options]}}
+                       start: {RabbitMQ.MessageDeduplicationPlugin.Cache,
+                               :start_link, [cache, options]}}
 
     case DynamicSupervisor.start_child(__MODULE__, specifications) do
       {:ok, _} -> :ok
