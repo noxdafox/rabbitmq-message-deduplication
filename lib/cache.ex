@@ -42,6 +42,13 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.Cache do
   end
 
   @doc """
+  Delete the given value from the cache.
+  """
+  def delete(cache, value) do
+    GenServer.call(cache, {:delete, cache, value})
+  end
+
+  @doc """
   True if the value is contained within the cache.
   """
   def member?(cache, value) do
@@ -87,6 +94,15 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.Cache do
 
     Mnesia.transaction(fn ->
       Mnesia.write({cache, value, entry_expiration(cache, ttl)})
+    end)
+
+    {:reply, :ok, state}
+  end
+
+  # Removes the given entry from the cache.
+  def handle_call({:delete, cache, value}, _from, state) do
+    Mnesia.transaction(fn ->
+      Mnesia.delete({cache, value})
     end)
 
     {:reply, :ok, state}
