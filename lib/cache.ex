@@ -69,6 +69,13 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.Cache do
     GenServer.call(cache, {:drop, cache})
   end
 
+  @doc """
+  Return information related to the given cache.
+  """
+  def info(cache) do
+    GenServer.call(cache, {:info, cache})
+  end
+
   ## Server Callbacks
 
   # Creates the Mnesia table and starts the janitor process.
@@ -134,6 +141,14 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.Cache do
       {:atomic, :ok} -> {:reply, :ok, state}
       _ -> {:reply, :error, state}
     end
+  end
+
+  # Return cache information: number of elements and max size
+  def handle_call({:info, cache}, _from, state) do
+    info = [size: cache_property(cache, :limit),
+            entries: Mnesia.table_info(cache, :size)]
+
+    {:reply, info, state}
   end
 
   ## Utility functions
@@ -204,6 +219,7 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.Cache do
     end
   end
 
+  # Retrieve the given property from the Mnesia user_properties field
   defp cache_property(cache, property) do
     {^property, value} =
       cache

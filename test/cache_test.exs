@@ -69,6 +69,12 @@ defmodule RabbitMQ.CacheTest do
     assert RabbitMQ.Cache.member?(cache, "foo") == false
   end
 
+  test "cache information", %{cache: cache, cache_ttl: _} do
+    RabbitMQ.Cache.put(cache, "foo")
+
+    assert RabbitMQ.Cache.info(cache) == [size: 1, entries: 1]
+  end
+
   test "drop the cache", %{cache: cache, cache_ttl: _} do
     :ok = RabbitMQ.Cache.drop(cache)
 
