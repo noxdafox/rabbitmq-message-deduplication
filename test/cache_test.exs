@@ -1,8 +1,9 @@
-defmodule RabbitMQ.CacheTest do
+defmodule RabbitMQ.MessageDeduplicationPlugin.Cache.Test do
   use ExUnit.Case
 
   alias :timer, as: Timer
   alias :mnesia, as: Mnesia
+  alias RabbitMQ.MessageDeduplicationPlugin.Cache, as: MessageCache
 
   setup do
     cache = :test_cache
@@ -17,11 +18,11 @@ defmodule RabbitMQ.CacheTest do
     cache_ttl_options = [size: 1, ttl: 1, persistence: :memory]
 
     start_supervised!(%{id: cache,
-                        start: {RabbitMQ.Cache,
+                        start: {MessageCache,
                                 :start_link,
                                 [cache, cache_options]}})
     start_supervised!(%{id: cache_ttl,
-                        start: {RabbitMQ.Cache,
+                        start: {MessageCache,
                                 :start_link,
                                 [cache_ttl, cache_ttl_options]}})
 
@@ -29,54 +30,72 @@ defmodule RabbitMQ.CacheTest do
   end
 
   test "basic insertion and lookup", %{cache: cache, cache_ttl: _} do
-    assert RabbitMQ.Cache.member?(cache, "foo") == false
+    assert MessageCache.member?(cache, "foo") == false
 
-    RabbitMQ.Cache.put(cache, "foo")
-    assert RabbitMQ.Cache.member?(cache, "foo") == true
+    MessageCache.put(cache, "foo")
+    assert MessageCache.member?(cache, "foo") == true
   end
 
   test "TTL at insertion", %{cache: cache, cache_ttl: _} do
-    assert RabbitMQ.Cache.member?(cache, "foo") == false
+    assert MessageCache.member?(cache, "foo") == false
 
-    RabbitMQ.Cache.put(cache, "foo", 1)
-    assert RabbitMQ.Cache.member?(cache, "foo") == true
+    MessageCache.put(cache, "foo", 1)
+    assert MessageCache.member?(cache, "foo") == true
 
     1 |> Timer.seconds() |> Timer.sleep()
 
-    assert RabbitMQ.Cache.member?(cache, "foo") == false
+    assert MessageCache.member?(cache, "foo") == false
   end
 
   test "TTL at table creation", %{cache: _, cache_ttl: cache} do
-    assert RabbitMQ.Cache.member?(cache, "foo") == false
+    assert MessageCache.member?(cache, "foo") == false
 
-    RabbitMQ.Cache.put(cache, "foo")
-    assert RabbitMQ.Cache.member?(cache, "foo") == true
+    MessageCache.put(cache, "foo")
+    assert MessageCache.member?(cache, "foo") == true
 
     1 |> Timer.seconds() |> Timer.sleep()
 
-    assert RabbitMQ.Cache.member?(cache, "foo") == false
+    assert MessageCache.member?(cache, "foo") == false
   end
 
   test "entries are deleted if cache is full", %{cache: cache, cache_ttl: _} do
-    assert RabbitMQ.Cache.member?(cache, "foo") == false
-    assert RabbitMQ.Cache.member?(cache, "bar") == false
+    assert MessageCache.member?(cache, "foo") == false
+    assert MessageCache.member?(cache, "bar") == false
 
-    RabbitMQ.Cache.put(cache, "foo")
-    assert RabbitMQ.Cache.member?(cache, "foo") == true
-    RabbitMQ.Cache.put(cache, "bar")
-    assert RabbitMQ.Cache.member?(cache, "bar") == true
+    MessageCache.put(cache, "foo")
+    assert MessageCache.member?(cache, "foo") == true
+    MessageCache.put(cache, "bar")
+    assert MessageCache.member?(cache, "bar") == true
 
-    assert RabbitMQ.Cache.member?(cache, "foo") == false
+    assert MessageCache.member?(cache, "foo") == false
+  end
+
+  test "cache entry deletion", %{cache: cache, cache_ttl: _} do
+    MessageCache.put(cache, "foo")
+    assert MessageCache.member?(cache, "foo") == true
+
+    MessageCache.delete(cache, "foo")
+
+    assert MessageCache.member?(cache, "foo") == false
   end
 
   test "cache information", %{cache: cache, cache_ttl: _} do
-    RabbitMQ.Cache.put(cache, "foo")
+    MessageCache.put(cache, "foo")
 
-    assert RabbitMQ.Cache.info(cache) == [size: 1, entries: 1]
+    assert MessageCache.info(cache) == [size: 1, entries: 1]
+  end
+
+  test "flush the cache", %{cache: cache, cache_ttl: _} do
+    MessageCache.put(cache, "foo")
+    assert MessageCache.member?(cache, "foo") == true
+
+    :ok = MessageCache.flush(cache)
+
+    assert MessageCache.member?(cache, "foo") == false
   end
 
   test "drop the cache", %{cache: cache, cache_ttl: _} do
-    :ok = RabbitMQ.Cache.drop(cache)
+    :ok = MessageCache.drop(cache)
 
     assert Enum.member?(Mnesia.system_info(:tables), cache) == false
   end
