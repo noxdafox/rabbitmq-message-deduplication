@@ -153,7 +153,7 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.Exchange do
   end
 
   def info(exchange(name: name), [:cache_info]) do
-    [cache_info: name |> cache_name() |> RabbitMQ.Cache.info()]
+    [cache_info: name |> cache_name() |> MessageCache.info()]
   end
 
   def info(_ex, _it) do
