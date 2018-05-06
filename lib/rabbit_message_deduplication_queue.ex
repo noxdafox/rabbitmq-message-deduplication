@@ -183,30 +183,26 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.Queue do
     passthrough3(state, do: fetchwhile(msg_pred, msg_fun, A, qs))
   end
 
-  def fetch(true, state = dqstate(queue: queue, queue_state: qs)) do
-    {{message, delivery, ack_tag}, state} = passthrough2(state) do
-      fetch(true, qs)
-    end
+  def fetch(need_ack, state = dqstate(queue: queue, queue_state: qs)) do
+    case passthrough2(state, do: fetch(need_ack, qs)) do
+      {:empty, state} -> {:empty, state}
+      {{message, delivery, ack_tag}, state} ->
+        case duplicate?(queue, message) do
+          false -> {{message, delivery, dqack(tag: ack_tag)}, state}
+          true ->
+            header =
+              message
+              |> basic_message(:content)
+              |> message_headers()
+              |> rabbitmq_keyfind("x-deduplication-header")
 
-    case duplicate?(queue, message) do
-      false -> {{message, delivery, dqack(tag: ack_tag)}, state}
-      true ->
-        header =
-          message
-          |> basic_message(:content)
-          |> message_headers()
-          |> rabbitmq_keyfind("x-deduplication-header")
-
-        {{message, delivery, dqack(tag: ack_tag, header: header)}, state}
+            {{message, delivery, dqack(tag: ack_tag, header: header)}, state}
+        end
     end
   end
 
-  def fetch(false, state = dqstate(queue_state: qs)) do
-    passthrough2(state, do: fetch(false, qs))
-  end
-
-  def drop(boolean, state = dqstate(queue_state: qs)) do
-    passthrough2(state, do: drop(boolean, qs))
+  def drop(need_ack, state = dqstate(queue_state: qs)) do
+    passthrough2(state, do: drop(need_ack, qs))
   end
 
   def ack(acks, state = dqstate(queue: queue, queue_state: qs)) do
