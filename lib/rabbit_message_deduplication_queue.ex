@@ -314,38 +314,32 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.Queue do
 
   # Returns true if the queue supports message deduplication
   # and the message is a duplicate.
-  defp duplicate?(amqqueue(name: name, arguments: arguments),
-                  basic_message(content: content)) do
+  # The message is added to the deduplication cache if missing.
+  defp duplicate?(amqqueue(name: name, arguments: arguments), message) do
     with true <- rabbitmq_keyfind(arguments, "x-message-deduplication", false),
-         headers when is_list(headers) <- message_headers(content) do
-      name |> cache_name() |> cached?(headers)
+         header when not is_nil(header) <- deduplication_header(message) do
+      name |> cache_name() |> cached?(header)
     else
       _ -> false
     end
   end
 
-  # Returns true if the message includes the header `x-deduplication-header`
-  # and its value is already present in the deduplication cache.
-  #
-  # false otherwise.
-  #
-  # If `x-deduplication-header` value is not present in the cache, it is added.
-  defp cached?(cache, headers) do
-    case rabbitmq_keyfind(headers, "x-deduplication-header") do
-      nil -> false
-      key -> case MessageCache.member?(cache, key) do
-               true -> true
-               false -> cache_put(cache, key, headers)
-                        false
-             end
+  # Returns true if the key is is already present in the deduplication cache.
+  # Otherwise, it adds it to the cache and returns false.
+  defp cached?(cache, key) do
+    case MessageCache.member?(cache, key) do
+      true -> true
+      false -> MessageCache.put(cache, key)
+               false
     end
   end
 
-  # Puts the key and related headers in the cache
-  defp cache_put(cache, key, headers) do
-    case rabbitmq_keyfind(headers, "x-cache-ttl") do
-      nil -> MessageCache.put(cache, key)
-      ttl -> MessageCache.put(cache, key, ttl)
+  # Return the deduplication header of the given message, nil if none.
+  defp deduplication_header(basic_message(content: content)) do
+    case message_headers(content) do
+      headers when is_list(headers) ->
+        rabbitmq_keyfind(headers, "x-deduplication-header")
+      _ -> nil
     end
   end
 
