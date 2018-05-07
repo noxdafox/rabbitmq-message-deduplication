@@ -201,8 +201,30 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.Queue do
     end
   end
 
-  def drop(need_ack, state = dqstate(queue_state: qs)) do
-    passthrough2(state, do: drop(need_ack, qs))
+  # TODO: this is a bit of a hack.
+  # As the drop callback returns only the message id, we can't retrieve
+  # the message deduplication header. As a workaround fetch is used.
+  # This assumes the backing queue drop and fetch behaviours are the same.
+  # A better solution would be to store the message IDs in a dedicated index.
+  def drop(need_ack, state = dqstate(queue: queue, queue_state: qs)) do
+    case duplicate?(queue) do
+      false -> passthrough2(state, do: drop(need_ack, qs))
+      true ->
+        case fetch(need_ack, state) do
+          {:empty, state} -> {:empty, state}
+          {{message = basic_message(id: id), _, ack_tag}, state} ->
+            header = deduplication_header(message)
+
+            if not is_nil(header) do
+              queue
+              |> amqqueue(:name)
+              |> cache_name()
+              |> MessageCache.delete(header)
+            end
+
+            {{id, ack_tag}, state}
+        end
+    end
   end
 
   def ack(acks, state = dqstate(queue: queue, queue_state: qs)) do
