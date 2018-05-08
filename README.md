@@ -48,7 +48,7 @@ Extra arguments:
 
   * `x-cache-size`: maximum size for the deduplication cache.
     This parameter is mandatory.
-  * `x-cache-ttl`: amount of time in seconds messages are kept in cache.
+  * `x-cache-ttl`: amount of time in milliseconds messages are kept in cache.
     This parameter is optional.
   * `x-cache-persistence`: whether the cache will persist on disk or in memory.
     This parameter is optional. Default persistence is memory.
@@ -58,7 +58,7 @@ Message deduplication
 
 Each message containing the `x-deduplication-header` header will not be routed if its value has been already submitted previously and has not expired.
 
-The optional header `x-cache-ttl` will override the default one if provided during the exchange declaration. This parameter controls for how many seconds to deduplicate the message. After the TTL expires, a new message with the same `x-deduplication-header` header will be routed again.
+The optional header `x-cache-ttl` will override the default one if provided during the exchange declaration. This parameter controls for how many milliseconds to deduplicate the message. After the TTL expires, a new message with the same `x-deduplication-header` header will be routed again.
 
 Running the tests
 -----------------

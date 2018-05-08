@@ -15,7 +15,7 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.Cache.Test do
     end
 
     cache_options = [size: 1, ttl: nil, persistence: :memory]
-    cache_ttl_options = [size: 1, ttl: 1, persistence: :memory]
+    cache_ttl_options = [size: 1, ttl: Timer.seconds(1), persistence: :memory]
 
     start_supervised!(%{id: cache,
                         start: {MessageCache,
@@ -39,7 +39,7 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.Cache.Test do
   test "TTL at insertion", %{cache: cache, cache_ttl: _} do
     assert MessageCache.member?(cache, "foo") == false
 
-    MessageCache.put(cache, "foo", 1)
+    MessageCache.put(cache, "foo", Timer.seconds(1))
     assert MessageCache.member?(cache, "foo") == true
 
     1 |> Timer.seconds() |> Timer.sleep()

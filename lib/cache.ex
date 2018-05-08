@@ -35,7 +35,7 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.Cache do
   end
 
   @doc """
-  Put the given value into the cache.
+  Put the given entry into the cache.
   """
   def put(cache, value, ttl \\ nil) do
     GenServer.call(cache, {:put, cache, value, ttl})
@@ -175,7 +175,7 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.Cache do
     {:atomic, entries} = Mnesia.transaction(fn -> Mnesia.read(cache, value) end)
 
     case List.keyfind(entries, value, 1) do
-      {_, _, expiration} -> expiration > Os.system_time(:seconds)
+      {_, _, expiration} -> expiration > Os.system_time(:millisecond)
       nil -> false
     end
   end
@@ -183,8 +183,8 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.Cache do
   # Remove all expired entries from the Mnesia cache.
   defp cache_delete_expired(cache) do
     select = fn ->
-      Mnesia.select(cache, [{{cache, :"$1", :_, :"$3"},
-                             [{:>, Os.system_time(:seconds), :"$3"}],
+      Mnesia.select(cache, [{{cache, :"$1", :"$2"},
+                             [{:>, Os.system_time(:millisecond), :"$2"}],
                              [:"$1"]}])
     end
 
@@ -213,8 +213,8 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.Cache do
     default = cache_property(cache, :default_ttl)
 
     cond do
-      ttl != nil -> Os.system_time(:seconds) + ttl
-      default != nil -> Os.system_time(:seconds) + default
+      ttl != nil -> Os.system_time(:millisecond) + ttl
+      default != nil -> Os.system_time(:millisecond) + default
       true -> nil
     end
   end
