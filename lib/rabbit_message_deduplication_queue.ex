@@ -90,15 +90,15 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.Queue do
     passthrough do: stop(vhost)
   end
 
-  def init(queue, recovery, callback) do
+  def init(queue = amqqueue(name: name, arguments: args), recovery, callback) do
     if duplicate?(queue) do
-      cache = queue |> amqqueue(:name) |> cache_name()
+      cache = cache_name(name)
+      ttl = rabbitmq_keyfind(args, "x-message-ttl")
       persistence =
-        queue
-        |> amqqueue(:arguments)
+        args
         |> rabbitmq_keyfind("x-cache-persistence", "memory")
         |> String.to_atom()
-      options = [persistence: persistence]
+      options = [ttl: ttl, persistence: persistence]
 
       RabbitLog.debug("Starting queue deduplication cache ~s~n", [cache])
 
@@ -175,10 +175,14 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.Queue do
     passthrough2(state, do: drain_confirmed(qs))
   end
 
+  # The dropwhile callback handles message TTL expiration.
+  # The duplicates cache TTL mechanism is used instead.
   def dropwhile(msg_pred, state = dqstate(queue_state: qs)) do
     passthrough2(state, do: dropwhile(msg_pred, qs))
   end
 
+  # The fetchwhile callback handles message TTL dead lettering.
+  # The duplicates cache TTL mechanism is used instead.
   def fetchwhile(msg_pred, msg_fun, A, state = dqstate(queue_state: qs)) do
     passthrough3(state, do: fetchwhile(msg_pred, msg_fun, A, qs))
   end
@@ -228,19 +232,19 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.Queue do
   end
 
   def ack(acks, state = dqstate(queue: queue, queue_state: qs)) do
-    acks = case duplicate?(queue) do
-             false -> Enum.map(acks, fn(dqack(tag: ack)) -> ack end)
-             true ->
-               cache = queue |> amqqueue(:name) |> cache_name()
+    acks =
+      case duplicate?(queue) do
+        false -> Enum.map(acks, fn(dqack(tag: ack)) -> ack end)
+        true ->
+          cache = queue |> amqqueue(:name) |> cache_name()
 
-               Enum.map(acks, fn(dqack(tag: ack, header: header)) ->
-                 if not is_nil(header) do
-                   MessageCache.delete(cache, header)
-                 end
-
-                 ack
-               end)
-           end
+          Enum.map(acks, fn(dqack(tag: ack, header: header)) ->
+            if not is_nil(header) do
+              MessageCache.delete(cache, header)
+            end
+            ack
+          end)
+      end
 
     passthrough2(state, do: ack(acks, qs))
   end
@@ -340,25 +344,25 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.Queue do
   defp duplicate?(amqqueue(name: name, arguments: arguments), message) do
     with true <- rabbitmq_keyfind(arguments, "x-message-deduplication", false),
          header when not is_nil(header) <- deduplication_header(message) do
-      name |> cache_name() |> cached?(header)
+      name |> cache_name() |> cached?(header, message_ttl(message))
     else
       _ -> false
     end
   end
 
-  # Returns true if the key is is already present in the deduplication cache.
+  # Returns true if the key is already present in the deduplication cache.
   # Otherwise, it adds it to the cache and returns false.
-  defp cached?(cache, key) do
+  defp cached?(cache, key, ttl) do
     case MessageCache.member?(cache, key) do
       true -> true
-      false -> MessageCache.put(cache, key)
+      false -> MessageCache.put(cache, key, ttl)
                false
     end
   end
 
   # Return the deduplication header of the given message, nil if none.
-  defp deduplication_header(basic_message(content: content)) do
-    case message_headers(content) do
+  defp deduplication_header(message) do
+    case message_headers(message) do
       headers when is_list(headers) ->
         rabbitmq_keyfind(headers, "x-deduplication-header")
       _ -> nil
@@ -382,8 +386,16 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.Queue do
   end
 
   # Unpacks the message headers
-  defp message_headers(message) do
-    message |> elem(2) |> elem(3)
+  defp message_headers(basic_message(content: content)) do
+    content |> elem(2) |> elem(3)
+  end
+
+  # Unpacks the message TTL in seconds
+  defp message_ttl(basic_message(content: content)) do
+    case content |> elem(2) |> elem(8) do
+      :undefined -> nil
+      ttl -> ttl |> String.to_integer()
+    end
   end
 
   defp sanitize_string(string) do
