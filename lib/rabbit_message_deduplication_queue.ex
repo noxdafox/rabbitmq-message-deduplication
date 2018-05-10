@@ -191,16 +191,18 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.Queue do
     case passthrough2(state, do: fetch(need_ack, qs)) do
       {:empty, state} -> {:empty, state}
       {{message, delivery, ack_tag}, state} ->
-        case duplicate?(queue, message) do
+        case duplicate?(queue) do
           false -> {{message, delivery, dqack(tag: ack_tag)}, state}
           true ->
-            header =
-              message
-              |> basic_message(:content)
-              |> message_headers()
-              |> rabbitmq_keyfind("x-deduplication-header")
+            case need_ack do
+              true ->
+                ack = dqack(tag: ack_tag, header: deduplication_header(message))
+                {{message, delivery, ack}, state}
+              false ->
+                maybe_delete_cache_entry(queue, message)
 
-            {{message, delivery, dqack(tag: ack_tag, header: header)}, state}
+                {{message, delivery, dqack(tag: ack_tag)}, state}
+            end
         end
     end
   end
@@ -217,14 +219,7 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.Queue do
         case fetch(need_ack, state) do
           {:empty, state} -> {:empty, state}
           {{message = basic_message(id: id), _, ack_tag}, state} ->
-            header = deduplication_header(message)
-
-            if not is_nil(header) do
-              queue
-              |> amqqueue(:name)
-              |> cache_name()
-              |> MessageCache.delete(header)
-            end
+            maybe_delete_cache_entry(queue, message)
 
             {{id, ack_tag}, state}
         end
@@ -236,12 +231,8 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.Queue do
       case duplicate?(queue) do
         false -> Enum.map(acks, fn(dqack(tag: ack)) -> ack end)
         true ->
-          cache = queue |> amqqueue(:name) |> cache_name()
-
           Enum.map(acks, fn(dqack(tag: ack, header: header)) ->
-            if not is_nil(header) do
-              MessageCache.delete(cache, header)
-            end
+            maybe_delete_cache_entry(queue, header)
             ack
           end)
       end
@@ -375,6 +366,21 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.Queue do
     queue = sanitize_string(queue)
 
     String.to_atom("cache_queue_#{resource}_#{queue}")
+  end
+
+  # Remove the message deduplication header from the cache
+  def maybe_delete_cache_entry(queue, header) when is_bitstring(header) do
+    queue |> amqqueue(:name) |> cache_name() |> MessageCache.delete(header)
+  end
+
+  def maybe_delete_cache_entry(_queue, header) when is_nil(header) do end
+
+  def maybe_delete_cache_entry(queue, message = basic_message()) do
+    header = deduplication_header(message)
+
+    if not is_nil(header) do
+      queue |> amqqueue(:name) |> cache_name() |> MessageCache.delete(header)
+    end
   end
 
   # Returns the value given a key from a RabbitMQ list [{"key", :type, value}]
