@@ -6,12 +6,23 @@
 # All rights reserved.
 
 
-defmodule RabbitMQ.CacheSupervisor do
+defmodule RabbitMQ.MessageDeduplicationPlugin.Supervisor do
   @moduledoc """
   The Cache Supervisor supervises the Cache GenServer Processes.
   """
 
   use DynamicSupervisor
+
+  Module.register_attribute __MODULE__,
+    :rabbit_boot_step,
+    accumulate: true, persist: true
+
+  @rabbit_boot_step {__MODULE__,
+                     [{:description,
+                       "message deduplication plugin cache supervisor"},
+                      {:mfa, {__MODULE__, :start_link, []}},
+                      {:requires, :database},
+                      {:enables, :external_infrastructure}]}
 
   @doc """
   Start the Supervisor process.
@@ -28,7 +39,8 @@ defmodule RabbitMQ.CacheSupervisor do
   """
   def start_cache(cache, options) do
     specifications = %{id: cache,
-                       start: {RabbitMQ.Cache, :start_link, [cache, options]}}
+                       start: {RabbitMQ.MessageDeduplicationPlugin.Cache,
+                               :start_link, [cache, options]}}
 
     case DynamicSupervisor.start_child(__MODULE__, specifications) do
       {:ok, _} -> :ok

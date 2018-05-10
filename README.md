@@ -1,12 +1,10 @@
-RabbitMQ Message Deduplication Plugin
-=====================================
+# RabbitMQ Message Deduplication Plugin
 
 A plugin for filtering duplicate messages.
 
-Exchange Type: `x-message-deduplication`
+Messages can be deduplicated when published into an exchange or enqueued to a queue.
 
-Installing
-----------
+## Installing
 
 Supported RabbitMQ versions:
 
@@ -20,8 +18,7 @@ Enable the plugin:
     [sudo] rabbitmq-plugins enable rabbitmq_message_deduplication_exchange
 ```
 
-Building from Source
---------------------
+## Building from Source
 
 Please see RabbitMQ Plugin Development guide.
 
@@ -39,35 +36,55 @@ Then copy all the *.ez files inside the plugins folder to the [RabbitMQ plugins 
     [sudo] rabbitmq-plugins enable rabbitmq_message_deduplication_exchange
 ```
 
-Declare an exchange
--------------------
+## Exchange level deduplication
+
+The exchange type `x-message-deduplication` allows to filter message duplicates before any routing rule is applied.
+
+Each message containing the `x-deduplication-header` header will not be routed if its value has been submitted previously. The amount of time a given message will be guaranteed to be unique can be controlled via the `x-cache-ttl` exchange argument or message header.
+
+### Declare an exchange
 
 To create a message deduplication exchange, just declare it providing the type `x-message-deduplication`.
 
 Extra arguments:
 
-  * `x-cache-size`: maximum size for the deduplication cache.
+  * `x-cache-size`: maximum size for the deduplication cache. If the deduplication cache fills up, older entries will be removed to give space to new ones.
     This parameter is mandatory.
-  * `x-cache-ttl`: amount of time in seconds messages are kept in cache.
+  * `x-cache-ttl`: amount of time in milliseconds duplicate headers are kept in cache.
     This parameter is optional.
-  * `x-cache-persistence`: whether the cache will persist on disk or in memory.
-    This parameter is optional. Default persistence is memory.
+  * `x-cache-persistence`: whether the duplicates cache will persist on disk or in memory.
+    This parameter is optional. Default persistence type is `memory`.
 
-Message deduplication
----------------------
+### Message headers
 
-Each message containing the `x-deduplication-header` header will not be routed if its value has been already submitted previously and has not expired.
+  * `x-deduplication-header`: messages will be deduplicated based on the content of this header. If the header is not provided, the message will not be checked against duplicates.
+  * `x-cache-ttl`: this header is optional and will override the default value provided during the exchange declaration. This header controls for how many milliseconds to deduplicate the message. After the TTL expires, a new message with the same header will be routed again.
 
-The optional header `x-cache-ttl` will override the default one if provided during the exchange declaration. This parameter controls for how many seconds to deduplicate the message. After the TTL expires, a new message with the same `x-deduplication-header` header will be routed again.
+## Queue level deduplication
 
-Running the tests
------------------
+A queue declared with the `x-message-deduplication` parameter enabled will filter message duplicates before they are published within.
+
+Each message containing the `x-deduplication-header` header will not be enqueued if another message with the same header is already present within the queue.
+
+### Declare a queue
+
+When declaring a queue, it is possible to enable message deduplication via the `x-message-deduplication` boolean argument.
+
+Extra arguments:
+
+  * `x-cache-persistence`: whether the duplicates cache will persist on disk or in memory.
+    This parameter is optional. Default persistence type is `memory`.
+
+### Message headers
+
+  * `x-deduplication-header`: messages will be deduplicated based on the content of this header. If the header is not provided, the message will not be checked against duplicates.
+
+## Running the tests
 
 ```bash
     make tests
 ```
 
-License
--------
+## License
 
 See the LICENSE file.

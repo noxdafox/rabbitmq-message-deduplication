@@ -6,15 +6,18 @@
 # All rights reserved.
 
 
-defmodule RabbitMQ.MessageDeduplicationExchangeType do
+defmodule RabbitMQ.MessageDeduplicationPlugin.Exchange do
   import Record, only: [defrecord: 2, extract: 2]
 
-  require RabbitMQ.Cache
-  require RabbitMQ.CacheSupervisor
+  require RabbitMQ.MessageDeduplicationPlugin.Cache
+  require RabbitMQ.MessageDeduplicationPlugin.Supervisor
 
+  alias :rabbit_log, as: RabbitLog
   alias :rabbit_misc, as: RabbitMisc
   alias :rabbit_router, as: RabbitRouter
   alias :rabbit_exchange, as: RabbitExchange
+  alias RabbitMQ.MessageDeduplicationPlugin.Cache, as: MessageCache
+  alias RabbitMQ.MessageDeduplicationPlugin.Supervisor, as: CacheSupervisor
 
   @behaviour :rabbit_exchange_type
 
@@ -30,13 +33,6 @@ defmodule RabbitMQ.MessageDeduplicationExchangeType do
                       {:requires, :rabbit_registry},
                       {:enables, :kernel_ready}]}
 
-  @rabbit_boot_step {:rabbit_exchange_type_caches_supervisor,
-                     [{:description,
-                       "message deduplication exchange type: supervisor"},
-                      {:mfa, {__MODULE__, :start_caches_supervisor, []}},
-                      {:requires, :database},
-                      {:enables, :external_infrastructure}]}
-
   defrecord :exchange, extract(
     :exchange, from_lib: "rabbit_common/include/rabbit.hrl")
 
@@ -48,10 +44,6 @@ defmodule RabbitMQ.MessageDeduplicationExchangeType do
 
   defrecord :basic_message, extract(
     :basic_message, from_lib: "rabbit_common/include/rabbit.hrl")
-
-  def start_caches_supervisor() do
-    RabbitMQ.CacheSupervisor.start_link()
-  end
 
   def description() do
     [
@@ -119,7 +111,9 @@ defmodule RabbitMQ.MessageDeduplicationExchangeType do
       |> String.to_atom()
     options = [size: size, ttl: ttl, persistence: persistence]
 
-    RabbitMQ.CacheSupervisor.start_cache(cache, options)
+    RabbitLog.debug("Starting exchange deduplication cache ~s~n", [cache])
+
+    CacheSupervisor.start_cache(cache, options)
   end
 
   def create(:none, _ex) do
@@ -129,9 +123,9 @@ defmodule RabbitMQ.MessageDeduplicationExchangeType do
   def delete(:transaction, exchange(name: name), _bs) do
     cache = cache_name(name)
 
-    :ok = RabbitMQ.Cache.drop(cache)
+    :ok = MessageCache.drop(cache)
 
-    RabbitMQ.CacheSupervisor.stop_cache(cache)
+    CacheSupervisor.stop_cache(cache)
   end
 
   def delete(:none, _ex, _bs) do
@@ -159,7 +153,7 @@ defmodule RabbitMQ.MessageDeduplicationExchangeType do
   end
 
   def info(exchange(name: name), [:cache_info]) do
-    [cache_info: name |> cache_name() |> RabbitMQ.Cache.info()]
+    [cache_info: name |> cache_name() |> MessageCache.info()]
   end
 
   def info(_ex, _it) do
@@ -185,7 +179,7 @@ defmodule RabbitMQ.MessageDeduplicationExchangeType do
   defp cached?(cache, headers) do
     case rabbitmq_keyfind(headers, "x-deduplication-header") do
       nil -> false
-      key -> case RabbitMQ.Cache.member?(cache, key) do
+      key -> case MessageCache.member?(cache, key) do
                true -> true
                false -> cache_put(cache, key, headers)
                         false
@@ -196,8 +190,8 @@ defmodule RabbitMQ.MessageDeduplicationExchangeType do
   # Puts the key and related headers in the cache
   defp cache_put(cache, key, headers) do
     case rabbitmq_keyfind(headers, "x-cache-ttl") do
-      nil -> RabbitMQ.Cache.put(cache, key)
-      ttl -> RabbitMQ.Cache.put(cache, key, ttl)
+      nil -> MessageCache.put(cache, key)
+      ttl -> MessageCache.put(cache, key, ttl)
     end
   end
 
@@ -206,7 +200,7 @@ defmodule RabbitMQ.MessageDeduplicationExchangeType do
     resource = sanitize_string(resource)
     exchange = sanitize_string(exchange)
 
-    String.to_atom("cache_#{resource}_#{exchange}")
+    String.to_atom("cache_exchange_#{resource}_#{exchange}")
   end
 
   # Returns the value given a key from a RabbitMQ list [{"key", :type, value}]

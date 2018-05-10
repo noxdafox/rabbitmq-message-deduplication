@@ -6,7 +6,7 @@
 # All rights reserved.
 
 
-defmodule RabbitMQ.Cache do
+defmodule RabbitMQ.MessageDeduplicationPlugin.Cache do
   @moduledoc """
   Simple cache implemented on top of Mnesia.
 
@@ -35,10 +35,17 @@ defmodule RabbitMQ.Cache do
   end
 
   @doc """
-  Put the given value into the cache.
+  Put the given entry into the cache.
   """
   def put(cache, value, ttl \\ nil) do
     GenServer.call(cache, {:put, cache, value, ttl})
+  end
+
+  @doc """
+  Delete the given value from the cache.
+  """
+  def delete(cache, value) do
+    GenServer.call(cache, {:delete, cache, value})
   end
 
   @doc """
@@ -49,10 +56,10 @@ defmodule RabbitMQ.Cache do
   end
 
   @doc """
-  Return information related to the given cache.
+  Flush the cache content.
   """
-  def info(cache) do
-    GenServer.call(cache, {:info, cache})
+  def flush(cache) do
+    GenServer.call(cache, {:flush, cache})
   end
 
   @doc """
@@ -60,6 +67,13 @@ defmodule RabbitMQ.Cache do
   """
   def drop(cache) do
     GenServer.call(cache, {:drop, cache})
+  end
+
+  @doc """
+  Return information related to the given cache.
+  """
+  def info(cache) do
+    GenServer.call(cache, {:info, cache})
   end
 
   ## Server Callbacks
@@ -99,17 +113,26 @@ defmodule RabbitMQ.Cache do
     {:reply, :ok, state}
   end
 
+  # Removes the given entry from the cache.
+  def handle_call({:delete, cache, value}, _from, state) do
+    Mnesia.transaction(fn ->
+      Mnesia.delete({cache, value})
+    end)
+
+    {:reply, :ok, state}
+  end
+
   # True if the value is in the cache.
   def handle_call({:member?, cache, value}, _from, state) do
     {:reply, cache_member?(cache, value), state}
   end
 
-  # Return cache information: number of elements and max size
-  def handle_call({:info, cache}, _from, state) do
-    info = [size: cache_property(cache, :limit),
-            entries: Mnesia.table_info(cache, :size)]
-
-    {:reply, info, state}
+  # Flush the Mnesia cache table.
+  def handle_call({:flush, cache}, _from, state) do
+    case Mnesia.clear_table(cache) do
+      {:atomic, :ok} -> {:reply, :ok, state}
+      _ -> {:reply, :error, state}
+    end
   end
 
   # Drop the Mnesia cache table.
@@ -118,6 +141,14 @@ defmodule RabbitMQ.Cache do
       {:atomic, :ok} -> {:reply, :ok, state}
       _ -> {:reply, :error, state}
     end
+  end
+
+  # Return cache information: number of elements and max size
+  def handle_call({:info, cache}, _from, state) do
+    info = [size: cache_property(cache, :limit),
+            entries: Mnesia.table_info(cache, :size)]
+
+    {:reply, info, state}
   end
 
   ## Utility functions
@@ -144,7 +175,7 @@ defmodule RabbitMQ.Cache do
     {:atomic, entries} = Mnesia.transaction(fn -> Mnesia.read(cache, value) end)
 
     case List.keyfind(entries, value, 1) do
-      {_, _, expiration} -> expiration > Os.system_time(:seconds)
+      {_, _, expiration} -> expiration > Os.system_time(:millisecond)
       nil -> false
     end
   end
@@ -152,8 +183,8 @@ defmodule RabbitMQ.Cache do
   # Remove all expired entries from the Mnesia cache.
   defp cache_delete_expired(cache) do
     select = fn ->
-      Mnesia.select(cache, [{{cache, :"$1", :_, :"$3"},
-                             [{:>, Os.system_time(:seconds), :"$3"}],
+      Mnesia.select(cache, [{{cache, :"$1", :"$2"},
+                             [{:>, Os.system_time(:millisecond), :"$2"}],
                              [:"$1"]}])
     end
 
@@ -182,8 +213,8 @@ defmodule RabbitMQ.Cache do
     default = cache_property(cache, :default_ttl)
 
     cond do
-      ttl != nil -> Os.system_time(:seconds) + ttl
-      default != nil -> Os.system_time(:seconds) + default
+      ttl != nil -> Os.system_time(:millisecond) + ttl
+      default != nil -> Os.system_time(:millisecond) + default
       true -> nil
     end
   end
