@@ -15,7 +15,7 @@ Download the .ez files from the latest [release](https://github.com/noxdafox/rab
 Enable the plugin:
 
 ```bash
-    [sudo] rabbitmq-plugins enable rabbitmq_message_deduplication_exchange
+    [sudo] rabbitmq-plugins enable rabbitmq_message_deduplication
 ```
 
 ## Building from Source
@@ -33,7 +33,7 @@ To build the plugin:
 Then copy all the *.ez files inside the plugins folder to the [RabbitMQ plugins directory](http://www.rabbitmq.com/relocate.html) and enable the plugin:
 
 ```bash
-    [sudo] rabbitmq-plugins enable rabbitmq_message_deduplication_exchange
+    [sudo] rabbitmq-plugins enable rabbitmq_message_deduplication
 ```
 
 ## Exchange level deduplication
