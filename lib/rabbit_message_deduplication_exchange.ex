@@ -67,22 +67,36 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.Exchange do
   def validate(exchange(arguments: args)) do
     case List.keyfind(args, "x-cache-size", 0) do
       {"x-cache-size", :long, val} when val > 0 -> :ok
+      {"x-cache-size", :longstr, val} ->
+        case Integer.parse(val, 10) do
+          :error -> RabbitMisc.protocol_error(
+                      :precondition_failed,
+                      "Missing or invalid argument, \
+                      'x-cache-size' must be an integer greater than 0", [])
+          _ -> :ok
+        end
       _ ->
         RabbitMisc.protocol_error(
           :precondition_failed,
           "Missing or invalid argument, \
-          'x-cache-size' must be an integer greater than 0",
-          [])
+          'x-cache-size' must be an integer greater than 0", [])
     end
 
     case List.keyfind(args, "x-cache-ttl", 0) do
       nil -> :ok
       {"x-cache-ttl", :long, val} when val > 0 -> :ok
+      {"x-cache-ttl", :longstr, val} ->
+        case Integer.parse(val, 10) do
+          :error -> RabbitMisc.protocol_error(
+                      :precondition_failed,
+                      "Invalid argument, \
+                      'x-cache-ttl' must be an integer greater than 0", [])
+          _ -> :ok
+        end
       _ -> RabbitMisc.protocol_error(
              :precondition_failed,
              "Invalid argument, \
-             'x-cache-ttl' must be an integer greater than 0",
-             [])
+             'x-cache-ttl' must be an integer greater than 0", [])
     end
 
     case List.keyfind(args, "x-cache-persistence", 0) do
@@ -92,8 +106,7 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.Exchange do
       _ -> RabbitMisc.protocol_error(
              :precondition_failed,
              "Invalid argument, \
-             'x-cache-persistence' must be either 'disk' or 'memory'",
-             [])
+             'x-cache-persistence' must be either 'disk' or 'memory'", [])
     end
   end
 
@@ -103,8 +116,15 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.Exchange do
 
   def create(:transaction, exchange(name: name, arguments: args)) do
     cache = cache_name(name)
-    ttl = rabbitmq_keyfind(args, "x-cache-ttl")
-    size = rabbitmq_keyfind(args, "x-cache-size")
+    ttl = case rabbitmq_keyfind(args, "x-cache-ttl") do
+            nil -> nil
+            integer when is_integer(integer) -> integer
+            number when is_bitstring(number) -> String.to_integer(number)
+          end
+    size = case rabbitmq_keyfind(args, "x-cache-size") do
+            integer when is_integer(integer) -> integer
+            number when is_bitstring(number) -> String.to_integer(number)
+           end
     persistence =
       args
       |> rabbitmq_keyfind("x-cache-persistence", "memory")
