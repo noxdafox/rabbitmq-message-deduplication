@@ -11,7 +11,7 @@ elixir_srcs  := mix.exs
 app:: $(elixir_srcs) deps
 	$(MIX) make_all
 
-tests::
+tests:: $(elixir_srcs) deps
 	MIX_ENV=test $(MIX) make_tests
 
 # FIXME: Use erlang.mk patched for RabbitMQ, while waiting for PRs to be
