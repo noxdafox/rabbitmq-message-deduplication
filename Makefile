@@ -1,17 +1,18 @@
-PROJECT = rabbitmq_message_deduplication_exchange
+PROJECT = rabbitmq_message_deduplication
 
 DEPS = rabbit_common rabbit amqp_client
 TEST_DEPS = rabbitmq_ct_helpers rabbitmq_ct_client_helpers
 
 DEP_PLUGINS = rabbit_common/mk/rabbitmq-plugin.mk
 
-elixir_srcs := mix.exs
+override MIX := mix
+elixir_srcs  := mix.exs
 
 app:: $(elixir_srcs) deps
 	$(MIX) make_all
-tests:: export MIX_ENV=test
-tests:: $(elixir_srcs) deps
-	$(MIX) make_tests
+
+tests::
+	MIX_ENV=test $(MIX) make_tests
 
 # FIXME: Use erlang.mk patched for RabbitMQ, while waiting for PRs to be
 # reviewed and merged.
