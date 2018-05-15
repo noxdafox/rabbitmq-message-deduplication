@@ -1,5 +1,9 @@
-%% Copyright (c) 2007-2017 Pivotal Software, Inc.
-%% You may use this code for any purpose.
+% This Source Code Form is subject to the terms of the Mozilla Public
+% License, v. 2.0. If a copy of the MPL was not distributed with this
+% file, You can obtain one at http://mozilla.org/MPL/2.0/.
+%
+% Copyright (c) 2017-2018, Matteo Cafasso.
+% All rights reserved.
 
 -module(exchange_SUITE).
 
