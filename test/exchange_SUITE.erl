@@ -53,6 +53,11 @@ init_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_started(Config, Testcase).
 
 end_per_testcase(Testcase, Config) ->
+    Channel = rabbit_ct_client_helpers:open_channel(Config),
+
+    amqp_channel:call(Channel, #'exchange.delete'{exchange = <<"test">>}),
+    amqp_channel:call(Channel, #'queue.delete'{queue = <<"test">>}),
+
     rabbit_ct_helpers:testcase_finished(Config, Testcase).
 
 %% -------------------------------------------------------------------
@@ -82,9 +87,7 @@ declare_exchanges(Config) ->
                                      type = <<"x-message-deduplication">>,
                                      arguments = [{<<"x-cache-size">>, longstr, "foo"},
                                                   {<<"x-cache-ttl">>, longstr, "bar"}]},
-    ?assertExit(_, amqp_channel:call(Channel, DeclareErr)),
-
-    ok.
+    ?assertExit(_, amqp_channel:call(Channel, DeclareErr)).
 
 deduplicate_message(Config) ->
     Channel = rabbit_ct_client_helpers:open_channel(Config),
@@ -100,12 +103,7 @@ deduplicate_message(Config) ->
 
     Get = #'basic.get'{queue = <<"test">>},
     {#'basic.get_ok'{}, _} = amqp_channel:call(Channel, Get),
-    #'basic.get_empty'{} = amqp_channel:call(Channel, Get),
-
-    delete_exchange(Channel, <<"test">>),
-    delete_queue(Channel, <<"test">>),
-
-    ok.
+    #'basic.get_empty'{} = amqp_channel:call(Channel, Get).
 
 deduplicate_message_ttl(Config) ->
     Channel = rabbit_ct_client_helpers:open_channel(Config),
@@ -120,12 +118,7 @@ deduplicate_message_ttl(Config) ->
 
     Get = #'basic.get'{queue = <<"test">>},
     {#'basic.get_ok'{}, _} = amqp_channel:call(Channel, Get),
-    {#'basic.get_ok'{}, _} = amqp_channel:call(Channel, Get),
-
-    delete_exchange(Channel, <<"test">>),
-    delete_queue(Channel, <<"test">>),
-
-    ok.
+    {#'basic.get_ok'{}, _} = amqp_channel:call(Channel, Get).
 
 deduplicate_message_cache_overflow(Config) ->
     Channel = rabbit_ct_client_helpers:open_channel(Config),
@@ -143,12 +136,7 @@ deduplicate_message_cache_overflow(Config) ->
     Get = #'basic.get'{queue = <<"test">>},
     {#'basic.get_ok'{}, _} = amqp_channel:call(Channel, Get),
     {#'basic.get_ok'{}, _} = amqp_channel:call(Channel, Get),
-    {#'basic.get_ok'{}, _} = amqp_channel:call(Channel, Get),
-
-    delete_exchange(Channel, <<"test">>),
-    delete_queue(Channel, <<"test">>),
-
-    ok.
+    {#'basic.get_ok'{}, _} = amqp_channel:call(Channel, Get).
 
 %% -------------------------------------------------------------------
 %% Utility functions.
@@ -161,19 +149,12 @@ make_exchange(Ex, Size, TTL) ->
        arguments   = [{<<"x-cache-size">>, long, Size},
                       {<<"x-cache-ttl">>, long, TTL}]}.
 
-delete_exchange(Ch, Ex) ->
-    Delete = #'exchange.delete'{exchange = Ex},
-    #'exchange.delete_ok'{} = amqp_channel:call(Ch, Delete).
-
 bind_new_queue(Ch, Ex, Q) ->
     Queue = #'queue.declare'{queue = <<"test">>, auto_delete = true},
     #'queue.declare_ok'{} = amqp_channel:call(Ch, Queue),
 
     Binding = #'queue.bind'{queue = Q, exchange = Ex, routing_key = <<"#">>},
     #'queue.bind_ok'{} = amqp_channel:call(Ch, Binding).
-
-delete_queue(Ch, Q) ->
-    #'queue.delete_ok'{} = amqp_channel:call(Ch, #'queue.delete'{queue = Q}).
 
 publish_message(Ch, Ex, D) ->
     Publish = #'basic.publish'{exchange = Ex, routing_key = <<"#">>},
