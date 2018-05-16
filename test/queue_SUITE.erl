@@ -1,0 +1,144 @@
+% This Source Code Form is subject to the terms of the Mozilla Public
+% License, v. 2.0. If a copy of the MPL was not distributed with this
+% file, You can obtain one at http://mozilla.org/MPL/2.0/.
+%
+% Copyright (c) 2017-2018, Matteo Cafasso.
+% All rights reserved.
+
+-module(queue_SUITE).
+
+-include_lib("eunit/include/eunit.hrl").
+-include_lib("common_test/include/ct.hrl").
+-include_lib("amqp_client/include/amqp_client.hrl").
+
+-compile(export_all).
+
+all() ->
+    [
+     {group, non_parallel_tests}
+    ].
+
+groups() ->
+    [
+     {non_parallel_tests, [], [
+                               deduplicate_message,
+                               deduplicate_message_ttl,
+                               message_acknowledged
+                              ]}
+    ].
+
+%% -------------------------------------------------------------------
+%% Testsuite setup/teardown.
+%% -------------------------------------------------------------------
+
+init_per_suite(Config) ->
+    rabbit_ct_helpers:log_environment(),
+    Config1 = rabbit_ct_helpers:set_config(Config,
+                                           [{rmq_nodename_suffix, ?MODULE}]),
+    rabbit_ct_helpers:run_setup_steps(Config1,
+                                      rabbit_ct_broker_helpers:setup_steps() ++
+                                      rabbit_ct_client_helpers:setup_steps()).
+
+end_per_suite(Config) ->
+    rabbit_ct_helpers:run_teardown_steps(
+      Config, rabbit_ct_client_helpers:teardown_steps() ++
+          rabbit_ct_broker_helpers:teardown_steps()).
+
+init_per_group(_, Config) -> Config.
+
+end_per_group(_, Config) -> Config.
+
+init_per_testcase(Testcase, Config) ->
+    rabbit_ct_helpers:testcase_started(Config, Testcase).
+
+end_per_testcase(Testcase, Config) ->
+    Channel = rabbit_ct_client_helpers:open_channel(Config),
+
+    amqp_channel:call(Channel, #'exchange.delete'{exchange = <<"test">>}),
+    amqp_channel:call(Channel, #'queue.delete'{queue = <<"test">>}),
+
+    rabbit_ct_helpers:testcase_finished(Config, Testcase).
+
+%% -------------------------------------------------------------------
+%% Testcases.
+%% -------------------------------------------------------------------
+
+deduplicate_message(Config) ->
+    Channel = rabbit_ct_client_helpers:open_channel(Config),
+
+    #'queue.declare_ok'{} = amqp_channel:call(Channel, make_queue(<<"test">>)),
+    bind_new_exchange(Channel, <<"test">>, <<"test">>),
+
+    publish_message(Channel, <<"test">>, "deduplicate-this"),
+    publish_message(Channel, <<"test">>, "deduplicate-this"),
+
+    timer:sleep(2000),
+
+    Get = #'basic.get'{queue = <<"test">>},
+    {#'basic.get_ok'{}, _} = amqp_channel:call(Channel, Get),
+    #'basic.get_empty'{} = amqp_channel:call(Channel, Get).
+
+deduplicate_message_ttl(Config) ->
+    Channel = rabbit_ct_client_helpers:open_channel(Config),
+
+    Args = [{<<"x-message-ttl">>, long, 1000}],
+    #'queue.declare_ok'{} = amqp_channel:call(Channel,
+                                              make_queue(<<"test">>, Args)),
+    bind_new_exchange(Channel, <<"test">>, <<"test">>),
+
+    publish_message(Channel, <<"test">>, "deduplicate-this"),
+    timer:sleep(2000),
+    publish_message(Channel, <<"test">>, "deduplicate-this"),
+    timer:sleep(500),
+
+    Get = #'basic.get'{queue = <<"test">>},
+    {#'basic.get_ok'{}, _} = amqp_channel:call(Channel, Get).
+
+message_acknowledged(Config) ->
+    Channel = rabbit_ct_client_helpers:open_channel(Config),
+
+    #'queue.declare_ok'{} = amqp_channel:call(Channel, make_queue(<<"test">>)),
+    bind_new_exchange(Channel, <<"test">>, <<"test">>),
+
+    publish_message(Channel, <<"test">>, "deduplicate-this"),
+
+    timer:sleep(2000),
+
+    Get = #'basic.get'{queue = <<"test">>},
+    {#'basic.get_ok'{delivery_tag = Tag}, _} = amqp_channel:call(Channel, Get),
+
+    amqp_channel:cast(Channel, #'basic.ack'{delivery_tag = Tag}),
+
+    publish_message(Channel, <<"test">>, "deduplicate-this"),
+
+    timer:sleep(2000),
+
+    Get = #'basic.get'{queue = <<"test">>},
+    {#'basic.get_ok'{}, _} = amqp_channel:call(Channel, Get).
+
+%% -------------------------------------------------------------------
+%% Utility functions.
+%% -------------------------------------------------------------------
+
+make_queue(Q) ->
+    #'queue.declare'{
+       queue       = Q,
+       arguments   = [{<<"x-message-deduplication">>, bool, true}]}.
+
+make_queue(Q, Args) ->
+    #'queue.declare'{
+       queue       = Q,
+       arguments   = [{<<"x-message-deduplication">>, bool, true} | Args]}.
+
+bind_new_exchange(Ch, Ex, Q) ->
+    Exchange = #'exchange.declare'{exchange = Ex, type = <<"direct">>},
+    #'exchange.declare_ok'{} = amqp_channel:call(Ch, Exchange),
+
+    Binding = #'queue.bind'{queue = Q, exchange = Ex, routing_key = <<"#">>},
+    #'queue.bind_ok'{} = amqp_channel:call(Ch, Binding).
+
+publish_message(Ch, Ex, D) ->
+    Publish = #'basic.publish'{exchange = Ex, routing_key = <<"#">>},
+    Props = #'P_basic'{headers = [{<<"x-deduplication-header">>, longstr, D}]},
+    Msg = #amqp_msg{props = Props, payload = <<"payload">>},
+    amqp_channel:cast(Ch, Publish, Msg).
