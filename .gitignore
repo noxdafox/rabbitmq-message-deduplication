@@ -1,6 +1,7 @@
 _build
 deps
 .erlang.mk
+.rabbitmq-components.mk
 log
 mix.lock
 plugins
