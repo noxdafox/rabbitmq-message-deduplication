@@ -65,6 +65,17 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.Cache.Test do
     assert MessageCache.member?(cache, "foo") == false
   end
 
+  test "entries are deleted after TTL", %{cache: cache, cache_ttl: _} do
+    assert MessageCache.member?(cache, "foo") == false
+
+    MessageCache.put(cache, "foo", Timer.seconds(1))
+    assert MessageCache.member?(cache, "foo") == true
+
+    Timer.sleep(3200)
+
+    assert Mnesia.transaction(fn -> Mnesia.all_keys(cache) end) == {:atomic, []}
+  end
+
   test "entries are deleted if cache is full", %{cache: cache, cache_ttl: _} do
     assert MessageCache.member?(cache, "foo") == false
     assert MessageCache.member?(cache, "bar") == false
