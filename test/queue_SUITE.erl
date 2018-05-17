@@ -23,7 +23,8 @@ groups() ->
      {non_parallel_tests, [], [
                                deduplicate_message,
                                deduplicate_message_ttl,
-                               message_acknowledged
+                               message_acknowledged,
+                               queue_overflow
                               ]}
     ].
 
@@ -115,6 +116,29 @@ message_acknowledged(Config) ->
 
     Get = #'basic.get'{queue = <<"test">>},
     {#'basic.get_ok'{}, _} = amqp_channel:call(Channel, Get).
+
+queue_overflow(Config) ->
+    Channel = rabbit_ct_client_helpers:open_channel(Config),
+
+    Args = [{<<"x-max-length">>, long, 1}],
+    #'queue.declare_ok'{} = amqp_channel:call(Channel,
+                                              make_queue(<<"test">>, Args)),
+    bind_new_exchange(Channel, <<"test">>, <<"test">>),
+
+    publish_message(Channel, <<"test">>, "deduplicate-this"),
+    publish_message(Channel, <<"test">>, "deduplicate-that"),
+    publish_message(Channel, <<"test">>, "deduplicate-this"),
+
+    timer:sleep(1000),
+
+    Get = #'basic.get'{queue = <<"test">>},
+    {#'basic.get_ok'{},
+     #amqp_msg{props = #'P_basic'{headers = [
+                                             {<<"x-deduplication-header">>,
+                                              longstr,
+                                              <<"deduplicate-this">>}
+                                            ]
+                                 }}} = amqp_channel:call(Channel, Get).
 
 %% -------------------------------------------------------------------
 %% Utility functions.
