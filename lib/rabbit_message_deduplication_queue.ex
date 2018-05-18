@@ -116,10 +116,12 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.Queue do
 
   def delete_and_terminate(
       any, state = dqstate(queue: queue, queue_state: qs)) do
-    cache = queue |> amqqueue(:name) |> cache_name()
+    if duplicate?(queue) do
+      cache = queue |> amqqueue(:name) |> cache_name()
 
-    :ok = MessageCache.drop(cache)
-    :ok = CacheSupervisor.stop_cache(cache)
+      :ok = MessageCache.drop(cache)
+      :ok = CacheSupervisor.stop_cache(cache)
+    end
 
     passthrough1(state) do
       delete_and_terminate(any, qs)
