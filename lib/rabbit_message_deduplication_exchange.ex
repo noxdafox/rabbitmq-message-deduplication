@@ -10,6 +10,7 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.Exchange do
   import Record, only: [defrecord: 2, extract: 2]
 
   require RabbitMQ.MessageDeduplicationPlugin.Cache
+  require RabbitMQ.MessageDeduplicationPlugin.Common
   require RabbitMQ.MessageDeduplicationPlugin.Supervisor
 
   alias :rabbit_log, as: RabbitLog
@@ -17,6 +18,7 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.Exchange do
   alias :rabbit_router, as: RabbitRouter
   alias :rabbit_exchange, as: RabbitExchange
   alias RabbitMQ.MessageDeduplicationPlugin.Cache, as: MessageCache
+  alias RabbitMQ.MessageDeduplicationPlugin.Common, as: Common
   alias RabbitMQ.MessageDeduplicationPlugin.Supervisor, as: CacheSupervisor
 
   @behaviour :rabbit_exchange_type
@@ -39,9 +41,6 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.Exchange do
   defrecord :delivery, extract(
     :delivery, from_lib: "rabbit_common/include/rabbit.hrl")
 
-  defrecord :binding, extract(
-    :binding, from_lib: "rabbit_common/include/rabbit.hrl")
-
   defrecord :basic_message, extract(
     :basic_message, from_lib: "rabbit_common/include/rabbit.hrl")
 
@@ -56,9 +55,8 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.Exchange do
     false
   end
 
-  def route(exchange(name: name),
-      delivery(message: basic_message(content: content))) do
-    case route?(cache_name(name), content) do
+  def route(exchange(name: name), delivery(message: msg = basic_message())) do
+    case route?(Common.cache_name(name), msg) do
       true -> RabbitRouter.match_routing_key(name, [:_])
       false -> []
     end
@@ -115,23 +113,15 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.Exchange do
   end
 
   def create(:transaction, exchange(name: name, arguments: args)) do
-    cache = cache_name(name)
-    ttl = case rabbitmq_keyfind(args, "x-cache-ttl") do
-            nil -> nil
-            integer when is_integer(integer) -> integer
-            number when is_bitstring(number) -> String.to_integer(number)
-          end
-    size = case rabbitmq_keyfind(args, "x-cache-size") do
-            integer when is_integer(integer) -> integer
-            number when is_bitstring(number) -> String.to_integer(number)
-           end
-    persistence =
-      args
-      |> rabbitmq_keyfind("x-cache-persistence", "memory")
-      |> String.to_atom()
-    options = [size: size, ttl: ttl, persistence: persistence]
+    cache = Common.cache_name(name)
+    options = [size: Common.cache_argument(args, "x-cache-size", :number),
+               ttl: Common.cache_argument(args, "x-cache-ttl", :number),
+               persistence: Common.cache_argument(
+                 args, "x-cache-persistence", :atom, "memory")]
 
-    RabbitLog.debug("Starting exchange deduplication cache ~s~n", [cache])
+    RabbitLog.debug(
+      "Starting exchange deduplication cache ~s with options ~p~n",
+      [cache, options])
 
     CacheSupervisor.start_cache(cache, options)
   end
@@ -141,7 +131,7 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.Exchange do
   end
 
   def delete(:transaction, exchange(name: name), _bs) do
-    cache = cache_name(name)
+    cache = Common.cache_name(name)
 
     :ok = MessageCache.drop(cache)
 
@@ -173,7 +163,7 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.Exchange do
   end
 
   def info(exchange(name: name), [:cache_info]) do
-    [cache_info: name |> cache_name() |> MessageCache.info()]
+    [cache_info: name |> Common.cache_name() |> MessageCache.info()]
   end
 
   def info(_ex, _it) do
@@ -184,62 +174,16 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.Exchange do
 
   # Whether to route the message or not.
   defp route?(cache, message) do
-    case message_headers(message) do
-      headers when is_list(headers) -> not cached?(cache, headers)
-      :undefined -> true
+    case Common.message_header(message, "x-deduplication-header") do
+      key when not is_nil(key) ->
+        case MessageCache.member?(cache, key) do
+          false ->
+            ttl = Common.message_header(message, "x-cache-ttl")
+            MessageCache.put(cache, key, ttl)
+            true
+          true -> false
+        end
+      nil -> true
     end
-  end
-
-  # Returns true if the message includes the header `x-deduplication-header`
-  # and its value is already present in the deduplication cache.
-  #
-  # false otherwise.
-  #
-  # If `x-deduplication-header` value is not present in the cache, it is added.
-  defp cached?(cache, headers) do
-    case rabbitmq_keyfind(headers, "x-deduplication-header") do
-      nil -> false
-      key -> case MessageCache.member?(cache, key) do
-               true -> true
-               false -> cache_put(cache, key, headers)
-                        false
-             end
-    end
-  end
-
-  # Puts the key and related headers in the cache
-  defp cache_put(cache, key, headers) do
-    case rabbitmq_keyfind(headers, "x-cache-ttl") do
-      nil -> MessageCache.put(cache, key)
-      ttl -> MessageCache.put(cache, key, ttl)
-    end
-  end
-
-  # Returns a sanitized atom composed by the resource and exchange name
-  defp cache_name({:resource, resource, :exchange, exchange}) do
-    resource = sanitize_string(resource)
-    exchange = sanitize_string(exchange)
-
-    String.to_atom("cache_exchange_#{resource}_#{exchange}")
-  end
-
-  # Returns the value given a key from a RabbitMQ list [{"key", :type, value}]
-  defp rabbitmq_keyfind(list, key, default \\ nil) do
-    case List.keyfind(list, key, 0) do
-      {_key, _type, value} -> value
-      _ -> default
-    end
-  end
-
-  # Unpacks the message headers
-  defp message_headers(message) do
-    message |> elem(2) |> elem(3)
-  end
-
-  defp sanitize_string(string) do
-    string
-    |> String.replace(~r/[-\. ]/, "_")
-    |> String.replace("/", "")
-    |> String.downcase()
   end
 end
