@@ -93,7 +93,7 @@ deduplicate_message(Config) ->
     Channel = rabbit_ct_client_helpers:open_channel(Config),
 
     #'exchange.declare_ok'{} = amqp_channel:call(
-                                 Channel, make_exchange(<<"test">>, 10, 10)),
+                                 Channel, make_exchange(<<"test">>, 10, 10000)),
     bind_new_queue(Channel, <<"test">>, <<"test">>),
 
     publish_message(Channel, <<"test">>, "deduplicate-this"),
@@ -109,7 +109,7 @@ deduplicate_message_ttl(Config) ->
     Channel = rabbit_ct_client_helpers:open_channel(Config),
 
     #'exchange.declare_ok'{} = amqp_channel:call(
-                                 Channel, make_exchange(<<"test">>, 10, 1)),
+                                 Channel, make_exchange(<<"test">>, 10, 1000)),
     bind_new_queue(Channel, <<"test">>, <<"test">>),
 
     publish_message(Channel, <<"test">>, "deduplicate-this"),
@@ -124,7 +124,7 @@ deduplicate_message_cache_overflow(Config) ->
     Channel = rabbit_ct_client_helpers:open_channel(Config),
 
     #'exchange.declare_ok'{} = amqp_channel:call(
-                                 Channel, make_exchange(<<"test">>, 1, 10)),
+                                 Channel, make_exchange(<<"test">>, 1, 10000)),
     bind_new_queue(Channel, <<"test">>, <<"test">>),
 
     publish_message(Channel, <<"test">>, "deduplicate-this"),
