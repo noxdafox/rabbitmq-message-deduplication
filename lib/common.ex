@@ -18,12 +18,17 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.Common do
   defrecord :amqqueue, extract(
     :amqqueue, from_lib: "rabbit_common/include/rabbit.hrl")
 
+  @type basic_message :: record(:basic_message)
   defrecord :basic_message, extract(
     :basic_message, from_lib: "rabbit_common/include/rabbit.hrl")
 
   defrecord :basic_properties, :P_basic, extract(
     :P_basic, from_lib: "rabbit_common/include/rabbit_framing.hrl")
 
+  @doc """
+  Retrieve Cache related information from a list of exchange or queue arguments.
+  """
+  @spec cache_argument(list, String.t, atom, any) :: String.t | nil
   def cache_argument(arguments, argument, type \\ nil, default \\ nil) do
     case type do
       :number -> case rabbitmq_keyfind(arguments, argument, default) do
@@ -39,6 +44,10 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.Common do
     end
   end
 
+  @doc """
+  Retrieve the given header from the message.
+  """
+  @spec message_header(basic_message, String.t) :: String.t | nil
   def message_header(basic_message(content:
         content(properties: properties)), header) do
     case properties do
@@ -49,6 +58,12 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.Common do
     end
   end
 
+  @doc """
+  Check if the routed/queued message is a duplicate.
+
+  If not, it adds it to the cache with the corresponding name.
+  """
+  @spec duplicate?(tuple, basic_message, integer | nil) :: boolean
   def duplicate?(name, message, ttl \\ nil) do
     cache = cache_name(name)
 
@@ -63,6 +78,11 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.Common do
     end
   end
 
+  @doc """
+  Constructs a sanitized cache name from a tuple containing
+  the VHost and the exchange/queue name.
+  """
+  @spec cache_name({:resource, String.t, :exchange | :queue, String.t}) :: atom
   def cache_name({:resource, resource, :exchange, exchange}) do
     resource = sanitize_string(resource)
     exchange = sanitize_string(exchange)
