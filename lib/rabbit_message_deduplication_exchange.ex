@@ -56,7 +56,7 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.Exchange do
   end
 
   def route(exchange(name: name), delivery(message: msg = basic_message())) do
-    case route?(Common.cache_name(name), msg) do
+    case route?(name, msg) do
       true -> RabbitRouter.match_routing_key(name, [:_])
       false -> []
     end
@@ -173,17 +173,8 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.Exchange do
   # Utility functions
 
   # Whether to route the message or not.
-  defp route?(cache, message) do
-    case Common.message_header(message, "x-deduplication-header") do
-      key when not is_nil(key) ->
-        case MessageCache.member?(cache, key) do
-          false ->
-            ttl = Common.message_header(message, "x-cache-ttl")
-            MessageCache.put(cache, key, ttl)
-            true
-          true -> false
-        end
-      nil -> true
-    end
+  defp route?(exchange_name, message) do
+    ttl = Common.message_header(message, "x-message-deduplication")
+    not Common.duplicate?(exchange_name, message, ttl)
   end
 end
