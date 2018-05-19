@@ -10,8 +10,8 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.Cache do
   @moduledoc """
   Simple cache implemented on top of Mnesia.
 
-  Values can be stored within the cache with a given TTL.
-  After the TTL expires the values will be transparently removed.
+  Entrys can be stored within the cache with a given TTL.
+  After the TTL expires the entrys will be transparently removed.
 
   The cache does not implement a FIFO mechanism due to Mnesia API limitations.
   An FIFO mechanism could be implemented using ordered_sets
@@ -30,34 +30,40 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.Cache do
   @doc """
   Create a new cache and start it.
   """
+  @spec start_link(atom, list) :: :ok | { :error, any }
   def start_link(cache, options) do
     GenServer.start_link(__MODULE__, {cache, options}, name: cache)
   end
 
   @doc """
   Put the given entry into the cache.
+  The TTL controls the lifetime in milliseconds of the entry.
   """
-  def put(cache, value, ttl \\ nil) do
-    GenServer.call(cache, {:put, cache, value, ttl})
+  @spec put(atom, any, integer | nil) :: :ok | { :error, any }
+  def put(cache, entry, ttl \\ nil) do
+    GenServer.call(cache, {:put, cache, entry, ttl})
   end
 
   @doc """
-  Delete the given value from the cache.
+  Delete the given entry from the cache.
   """
-  def delete(cache, value) do
-    GenServer.call(cache, {:delete, cache, value})
+  @spec delete(atom, any) :: :ok | { :error, any }
+  def delete(cache, entry) do
+    GenServer.call(cache, {:delete, cache, entry})
   end
 
   @doc """
-  True if the value is contained within the cache.
+  True if the entry is contained within the cache.
   """
-  def member?(cache, value) do
-    GenServer.call(cache, {:member?, cache, value})
+  @spec delete(atom, any) :: boolean
+  def member?(cache, entry) do
+    GenServer.call(cache, {:member?, cache, entry})
   end
 
   @doc """
   Flush the cache content.
   """
+  @spec flush(atom) :: :ok | { :error, any }
   def flush(cache) do
     GenServer.call(cache, {:flush, cache})
   end
@@ -65,6 +71,7 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.Cache do
   @doc """
   Drop the cache with all its content.
   """
+  @spec drop(atom) :: :ok | { :error, any }
   def drop(cache) do
     GenServer.call(cache, {:drop, cache})
   end
@@ -72,6 +79,7 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.Cache do
   @doc """
   Return information related to the given cache.
   """
+  @spec drop(atom) :: list
   def info(cache) do
     GenServer.call(cache, {:info, cache})
   end
@@ -101,30 +109,30 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.Cache do
 
   # Puts a new entry in the cache.
   # If the cache is full, remove an element to make space.
-  def handle_call({:put, cache, value, ttl}, _from, state) do
+  def handle_call({:put, cache, entry, ttl}, _from, state) do
     if cache_full?(cache) do
       cache_delete_first(cache)
     end
 
     Mnesia.transaction(fn ->
-      Mnesia.write({cache, value, entry_expiration(cache, ttl)})
+      Mnesia.write({cache, entry, entry_expiration(cache, ttl)})
     end)
 
     {:reply, :ok, state}
   end
 
   # Removes the given entry from the cache.
-  def handle_call({:delete, cache, value}, _from, state) do
+  def handle_call({:delete, cache, entry}, _from, state) do
     Mnesia.transaction(fn ->
-      Mnesia.delete({cache, value})
+      Mnesia.delete({cache, entry})
     end)
 
     {:reply, :ok, state}
   end
 
-  # True if the value is in the cache.
-  def handle_call({:member?, cache, value}, _from, state) do
-    {:reply, cache_member?(cache, value), state}
+  # True if the entry is in the cache.
+  def handle_call({:member?, cache, entry}, _from, state) do
+    {:reply, cache_member?(cache, entry), state}
   end
 
   # Flush the Mnesia cache table.
@@ -159,7 +167,7 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.Cache do
                     :disk -> :disc_copies
                     :memory -> :ram_copies
                   end
-    options = [{:attributes, [:value, :expiration]},
+    options = [{:attributes, [:entry, :expiration]},
                {persistence, [node()]},
                {:index, [:expiration]},
                {:user_properties, [{:limit, Keyword.get(options, :size)},
@@ -171,10 +179,10 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.Cache do
   end
 
   # Mnesia cache lookup. The entry is not returned if expired.
-  defp cache_member?(cache, value) do
-    {:atomic, entries} = Mnesia.transaction(fn -> Mnesia.read(cache, value) end)
+  defp cache_member?(cache, entry) do
+    {:atomic, entries} = Mnesia.transaction(fn -> Mnesia.read(cache, entry) end)
 
-    case List.keyfind(entries, value, 1) do
+    case List.keyfind(entries, entry, 1) do
       {_, _, expiration} -> expiration > Os.system_time(:millisecond)
       nil -> false
     end
@@ -221,11 +229,11 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.Cache do
 
   # Retrieve the given property from the Mnesia user_properties field
   defp cache_property(cache, property) do
-    {^property, value} =
+    {^property, entry} =
       cache
       |> Mnesia.table_info(:user_properties)
       |> Enum.find(fn(element) -> match?({^property, _}, element) end)
 
-    value
+    entry
   end
 end
