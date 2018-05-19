@@ -8,6 +8,10 @@
 defmodule RabbitMQ.MessageDeduplicationPlugin.Common do
   import Record, only: [defrecord: 2, defrecord: 3, extract: 2]
 
+  require RabbitMQ.MessageDeduplicationPlugin.Cache
+
+  alias RabbitMQ.MessageDeduplicationPlugin.Cache, as: MessageCache
+
   defrecord :content, extract(
     :content, from_lib: "rabbit_common/include/rabbit.hrl")
 
@@ -20,17 +24,18 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.Common do
   defrecord :basic_properties, :P_basic, extract(
     :P_basic, from_lib: "rabbit_common/include/rabbit_framing.hrl")
 
-  def cache_argument(arguments, argument, type, default \\ nil) do
+  def cache_argument(arguments, argument, type \\ nil, default \\ nil) do
     case type do
       :number -> case rabbitmq_keyfind(arguments, argument, default) do
                    number when is_bitstring(number) -> String.to_integer(number)
                    integer when is_integer(integer) -> integer
-                   nil -> nil
+                   ^default -> default
                  end
       :atom -> case rabbitmq_keyfind(arguments, argument, default) do
                  string when is_bitstring(string) -> String.to_atom(string)
-                 nil -> nil
+                 ^default -> default
                end
+      nil -> rabbitmq_keyfind(arguments, argument, default)
     end
   end
 
@@ -41,6 +46,20 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.Common do
         rabbitmq_keyfind(headers, header)
       basic_properties(headers: :undefined) -> nil
       :undefined -> nil
+    end
+  end
+
+  def duplicate?(name, message, ttl \\ nil) do
+    cache = cache_name(name)
+
+    case message_header(message, "x-deduplication-header") do
+      key when not is_nil(key) ->
+        case MessageCache.member?(cache, key) do
+          false -> MessageCache.put(cache, key, ttl)
+                   false
+          true -> true
+        end
+      nil -> true
     end
   end
 
