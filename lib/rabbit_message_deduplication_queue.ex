@@ -133,9 +133,11 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.Queue do
   end
 
   def purge(state = dqstate(queue: queue, queue_state: qs)) do
-    cache = queue |> amqqueue(:name) |> cache_name()
+    if duplicate?(queue) do
+      cache = queue |> amqqueue(:name) |> cache_name()
 
-    :ok = MessageCache.flush(cache)
+      :ok = MessageCache.flush(cache)
+    end
 
     passthrough2(state, do: purge(qs))
   end
