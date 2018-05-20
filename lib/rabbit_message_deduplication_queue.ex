@@ -304,8 +304,20 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.Queue do
     passthrough do: msg_rates(qs)
   end
 
-  def info(atom, dqstate(queue_state: qs)) do
-    passthrough do: info(atom, qs)
+  def info(atom, dqstate(queue: queue, queue_state: qs)) do
+    case duplicate?(queue) do
+      true -> case passthrough do: info(atom, qs) do
+                queue_info when is_list(queue_info) ->
+                  cache_info = queue
+                  |> amqqueue(:name)
+                  |> Common.cache_name()
+                  |> MessageCache.info()
+
+                  [cache_info: cache_info] ++ queue_info
+                queue_info -> queue_info
+              end
+      false -> passthrough do: info(atom, qs)
+    end
   end
 
   def invoke(atom, function, state = dqstate(queue_state: qs)) do
