@@ -174,7 +174,7 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.Exchange do
 
   # Whether to route the message or not.
   defp route?(exchange_name, message) do
-    ttl = Common.message_header(message, "x-message-deduplication")
+    ttl = Common.message_header(message, "x-cache-ttl")
     not Common.duplicate?(exchange_name, message, ttl)
   end
 end
