@@ -75,8 +75,6 @@ deduplicate_message(Config) ->
     publish_message(Channel, <<"test">>, "deduplicate-this"),
     publish_message(Channel, <<"test">>, "deduplicate-this"),
 
-    timer:sleep(1000),
-
     {#'basic.get_ok'{}, _} = amqp_channel:call(Channel, Get),
     #'basic.get_empty'{} = amqp_channel:call(Channel, Get),
 
@@ -84,12 +82,11 @@ deduplicate_message(Config) ->
     publish_message(Channel, <<"test">>),
     publish_message(Channel, <<"test">>),
 
-    timer:sleep(1000),
-
     {#'basic.get_ok'{}, _} = amqp_channel:call(Channel, Get),
     {#'basic.get_ok'{}, _} = amqp_channel:call(Channel, Get).
 
 deduplicate_message_ttl(Config) ->
+    Get = #'basic.get'{queue = <<"test">>},
     Channel = rabbit_ct_client_helpers:open_channel(Config),
 
     Args = [{<<"x-message-ttl">>, long, 1000}],
@@ -97,15 +94,22 @@ deduplicate_message_ttl(Config) ->
                                               make_queue(<<"test">>, Args)),
     bind_new_exchange(Channel, <<"test">>, <<"test">>),
 
+    %% Queue default TTL
     publish_message(Channel, <<"test">>, "deduplicate-this"),
     timer:sleep(2000),
     publish_message(Channel, <<"test">>, "deduplicate-this"),
-    timer:sleep(500),
 
-    Get = #'basic.get'{queue = <<"test">>},
+    {#'basic.get_ok'{}, _} = amqp_channel:call(Channel, Get),
+
+    %% Message TTL override
+    publish_message(Channel, <<"test">>, "deduplicate-that", <<"500">>),
+    timer:sleep(800),
+    publish_message(Channel, <<"test">>, "deduplicate-that", <<"500">>),
+
     {#'basic.get_ok'{}, _} = amqp_channel:call(Channel, Get).
 
 message_acknowledged(Config) ->
+    Get = #'basic.get'{queue = <<"test">>},
     Channel = rabbit_ct_client_helpers:open_channel(Config),
 
     #'queue.declare_ok'{} = amqp_channel:call(Channel, make_queue(<<"test">>)),
@@ -113,21 +117,16 @@ message_acknowledged(Config) ->
 
     publish_message(Channel, <<"test">>, "deduplicate-this"),
 
-    timer:sleep(2000),
-
-    Get = #'basic.get'{queue = <<"test">>},
     {#'basic.get_ok'{delivery_tag = Tag}, _} = amqp_channel:call(Channel, Get),
 
     amqp_channel:cast(Channel, #'basic.ack'{delivery_tag = Tag}),
 
     publish_message(Channel, <<"test">>, "deduplicate-this"),
 
-    timer:sleep(2000),
-
-    Get = #'basic.get'{queue = <<"test">>},
     {#'basic.get_ok'{}, _} = amqp_channel:call(Channel, Get).
 
 queue_overflow(Config) ->
+    Get = #'basic.get'{queue = <<"test">>},
     Channel = rabbit_ct_client_helpers:open_channel(Config),
 
     Args = [{<<"x-max-length">>, long, 1}],
@@ -139,9 +138,6 @@ queue_overflow(Config) ->
     publish_message(Channel, <<"test">>, "deduplicate-that"),
     publish_message(Channel, <<"test">>, "deduplicate-this"),
 
-    timer:sleep(1000),
-
-    Get = #'basic.get'{queue = <<"test">>},
     {#'basic.get_ok'{},
      #amqp_msg{props = #'P_basic'{headers = [
                                              {<<"x-deduplication-header">>,
@@ -177,7 +173,14 @@ publish_message(Ch, Ex) ->
     amqp_channel:cast(Ch, Publish, Msg).
 
 publish_message(Ch, Ex, D) ->
-    Publish = #'basic.publish'{exchange = Ex, routing_key = <<"#">>},
     Props = #'P_basic'{headers = [{<<"x-deduplication-header">>, longstr, D}]},
+    Publish = #'basic.publish'{exchange = Ex, routing_key = <<"#">>},
+    Msg = #amqp_msg{props = Props, payload = <<"payload">>},
+    amqp_channel:cast(Ch, Publish, Msg).
+
+publish_message(Ch, Ex, D, E) ->
+    Props = #'P_basic'{headers = [{<<"x-deduplication-header">>, longstr, D}],
+                       expiration = E},
+    Publish = #'basic.publish'{exchange = Ex, routing_key = <<"#">>},
     Msg = #amqp_msg{props = Props, payload = <<"payload">>},
     amqp_channel:cast(Ch, Publish, Msg).
