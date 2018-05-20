@@ -23,6 +23,7 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.Cache do
 
   alias :os, as: Os
   alias :timer, as: Timer
+  alias :erlang, as: Erlang
   alias :mnesia, as: Mnesia
 
   ## Client API
@@ -153,8 +154,14 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.Cache do
 
   # Return cache information: number of elements and max size
   def handle_call({:info, cache}, _from, state) do
-    info = [size: cache_property(cache, :limit),
-            entries: Mnesia.table_info(cache, :size)]
+    info = [
+      bytes: Mnesia.table_info(cache, :memory) * Erlang.system_info(:wordsize),
+      entries: Mnesia.table_info(cache, :size)
+    ]
+    info = case cache_property(cache, :limit) do
+             number when is_integer(number) -> [size: number] ++ info
+             nil -> info
+           end
 
     {:reply, info, state}
   end
