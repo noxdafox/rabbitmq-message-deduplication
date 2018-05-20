@@ -65,19 +65,29 @@ end_per_testcase(Testcase, Config) ->
 %% -------------------------------------------------------------------
 
 deduplicate_message(Config) ->
+    Get = #'basic.get'{queue = <<"test">>},
     Channel = rabbit_ct_client_helpers:open_channel(Config),
 
     #'queue.declare_ok'{} = amqp_channel:call(Channel, make_queue(<<"test">>)),
     bind_new_exchange(Channel, <<"test">>, <<"test">>),
 
+    %% Deduplication header present
     publish_message(Channel, <<"test">>, "deduplicate-this"),
     publish_message(Channel, <<"test">>, "deduplicate-this"),
 
-    timer:sleep(2000),
+    timer:sleep(1000),
 
-    Get = #'basic.get'{queue = <<"test">>},
     {#'basic.get_ok'{}, _} = amqp_channel:call(Channel, Get),
-    #'basic.get_empty'{} = amqp_channel:call(Channel, Get).
+    #'basic.get_empty'{} = amqp_channel:call(Channel, Get),
+
+    %% Deduplication header absent
+    publish_message(Channel, <<"test">>),
+    publish_message(Channel, <<"test">>),
+
+    timer:sleep(1000),
+
+    {#'basic.get_ok'{}, _} = amqp_channel:call(Channel, Get),
+    {#'basic.get_ok'{}, _} = amqp_channel:call(Channel, Get).
 
 deduplicate_message_ttl(Config) ->
     Channel = rabbit_ct_client_helpers:open_channel(Config),
@@ -160,6 +170,11 @@ bind_new_exchange(Ch, Ex, Q) ->
 
     Binding = #'queue.bind'{queue = Q, exchange = Ex, routing_key = <<"#">>},
     #'queue.bind_ok'{} = amqp_channel:call(Ch, Binding).
+
+publish_message(Ch, Ex) ->
+    Publish = #'basic.publish'{exchange = Ex, routing_key = <<"#">>},
+    Msg = #amqp_msg{payload = <<"payload">>},
+    amqp_channel:cast(Ch, Publish, Msg).
 
 publish_message(Ch, Ex, D) ->
     Publish = #'basic.publish'{exchange = Ex, routing_key = <<"#">>},
