@@ -15,12 +15,15 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.Cache.Test do
   setup do
     cache = :test_cache
     cache_ttl = :test_cache_ttl
+    cache_simple = :cache_simple
 
     on_exit fn ->
       Mnesia.delete_table(cache)
       Mnesia.delete_table(cache_ttl)
+      Mnesia.delete_table(cache_simple)
     end
 
+    cache_simple_options = [persistence: :memory]
     cache_options = [size: 1, ttl: nil, persistence: :memory]
     cache_ttl_options = [size: 1, ttl: Timer.seconds(1), persistence: :memory]
 
@@ -32,18 +35,24 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.Cache.Test do
                         start: {MessageCache,
                                 :start_link,
                                 [cache_ttl, cache_ttl_options]}})
+    start_supervised!(%{id: cache_simple,
+                        start: {MessageCache,
+                                :start_link,
+                                [cache_simple, cache_simple_options]}})
 
-    %{cache: cache, cache_ttl: cache_ttl}
+    %{cache: cache, cache_ttl: cache_ttl, cache_simple: cache_simple}
   end
 
-  test "basic insertion and lookup", %{cache: cache, cache_ttl: _} do
+  test "basic insertion and lookup",
+      %{cache: cache, cache_ttl: _, cache_simple: _} do
     assert MessageCache.member?(cache, "foo") == false
 
     MessageCache.put(cache, "foo")
     assert MessageCache.member?(cache, "foo") == true
   end
 
-  test "TTL at insertion", %{cache: cache, cache_ttl: _} do
+  test "TTL at insertion",
+      %{cache: cache, cache_ttl: _, cache_simple: _} do
     assert MessageCache.member?(cache, "foo") == false
 
     MessageCache.put(cache, "foo", Timer.seconds(1))
@@ -54,7 +63,8 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.Cache.Test do
     assert MessageCache.member?(cache, "foo") == false
   end
 
-  test "TTL at table creation", %{cache: _, cache_ttl: cache} do
+  test "TTL at table creation",
+      %{cache: _, cache_ttl: cache, cache_simple: _} do
     assert MessageCache.member?(cache, "foo") == false
 
     MessageCache.put(cache, "foo")
@@ -65,7 +75,8 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.Cache.Test do
     assert MessageCache.member?(cache, "foo") == false
   end
 
-  test "entries are deleted after TTL", %{cache: cache, cache_ttl: _} do
+  test "entries are deleted after TTL",
+      %{cache: cache, cache_ttl: _, cache_simple: _} do
     assert MessageCache.member?(cache, "foo") == false
 
     MessageCache.put(cache, "foo", Timer.seconds(1))
@@ -76,7 +87,8 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.Cache.Test do
     assert Mnesia.transaction(fn -> Mnesia.all_keys(cache) end) == {:atomic, []}
   end
 
-  test "entries are deleted if cache is full", %{cache: cache, cache_ttl: _} do
+  test "entries are deleted if cache is full",
+      %{cache: cache, cache_ttl: _, cache_simple: _} do
     assert MessageCache.member?(cache, "foo") == false
     assert MessageCache.member?(cache, "bar") == false
 
@@ -88,7 +100,7 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.Cache.Test do
     assert MessageCache.member?(cache, "foo") == false
   end
 
-  test "cache entry deletion", %{cache: cache, cache_ttl: _} do
+  test "cache entry deletion", %{cache: cache, cache_ttl: _, cache_simple: _} do
     MessageCache.put(cache, "foo")
     assert MessageCache.member?(cache, "foo") == true
 
@@ -97,13 +109,21 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.Cache.Test do
     assert MessageCache.member?(cache, "foo") == false
   end
 
-  test "cache information", %{cache: cache, cache_ttl: _} do
+  test "cache information",
+      %{cache: cache, cache_ttl: _, cache_simple: _} do
     MessageCache.put(cache, "foo")
 
-    assert MessageCache.info(cache) == [size: 1, entries: 1]
+    [size: 1, bytes: _, entries: 1] = MessageCache.info(cache)
   end
 
-  test "flush the cache", %{cache: cache, cache_ttl: _} do
+  test "simple cache information",
+      %{cache: _, cache_ttl: _, cache_simple: cache_simple} do
+    MessageCache.put(cache_simple, "foo")
+
+    [bytes: _, entries: 1] = MessageCache.info(cache_simple)
+  end
+
+  test "flush the cache", %{cache: cache, cache_ttl: _, cache_simple: _} do
     MessageCache.put(cache, "foo")
     assert MessageCache.member?(cache, "foo") == true
 
@@ -112,7 +132,7 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.Cache.Test do
     assert MessageCache.member?(cache, "foo") == false
   end
 
-  test "drop the cache", %{cache: cache, cache_ttl: _} do
+  test "drop the cache", %{cache: cache, cache_ttl: _, cache_simple: _} do
     :ok = MessageCache.drop(cache)
 
     assert Enum.member?(Mnesia.system_info(:tables), cache) == false
