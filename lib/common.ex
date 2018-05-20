@@ -74,7 +74,7 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.Common do
                    false
           true -> true
         end
-      nil -> true
+      nil -> false
     end
   end
 
