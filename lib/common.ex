@@ -6,6 +6,12 @@
 # All rights reserved.
 
 defmodule RabbitMQ.MessageDeduplicationPlugin.Common do
+  @moduledoc """
+  Common functions shared between the exchange and the queue
+  behaviour implementations.
+
+  """
+
   import Record, only: [defrecord: 2, defrecord: 3, extract: 2]
 
   require RabbitMQ.MessageDeduplicationPlugin.Cache
@@ -49,7 +55,7 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.Common do
   """
   @spec message_header(basic_message, String.t) :: String.t | nil
   def message_header(basic_message(content:
-        content(properties: properties)), header) do
+      content(properties: properties)), header) do
     case properties do
       basic_properties(headers: headers) when is_list(headers) ->
         rabbitmq_keyfind(headers, header)

@@ -6,6 +6,22 @@
 # All rights reserved.
 
 defmodule RabbitMQ.MessageDeduplicationPlugin.Queue do
+  @moduledoc """
+  This module adds support for deduplication queues.
+
+  Messages carrying the `x-deduplication-header` header will be deduplicated
+  if a message with the same header value is already present within the queue.
+
+  When a message is published within the queue, it's checked against duplicates.
+  If no duplicate is found, the message is inserted and its deduplication header
+  cached. Once the message is acknowledged or dropped, the header is removed
+  from the cache.
+
+  This module implements the `rabbit_backing_queue` behaviour delegating
+  all the queue related operation to the underlying backing queue.
+
+  """
+
   import Record, only: [defrecord: 2, defrecord: 3, defrecordp: 2, extract: 2]
 
   require RabbitMQ.MessageDeduplicationPlugin.Cache
@@ -45,6 +61,11 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.Queue do
   defrecordp :dqack, [:tag, :header]
   defrecordp :dqstate, [:queue, :queue_state]
 
+  # The passthrough macros call the underlying backing queue functions
+  # The suffixes indicate the arity of the return values
+  # of the backing queue functions they are wrapping.
+
+  # Backing queue functions returning one value, does not change the queue state
   defmacrop passthrough(do: function) do
     quote do
       backing_queue = Application.get_env(__MODULE__, :backing_queue_module)
@@ -52,6 +73,7 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.Queue do
     end
   end
 
+  # Backing queue functions returning the state
   defmacrop passthrough1(state, do: function) do
     quote do
       queue = dqstate(unquote(state), :queue)
@@ -61,6 +83,7 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.Queue do
     end
   end
 
+  # Backing queue functions returning a tuple {result, state}
   defmacrop passthrough2(state, do: function) do
     quote do
       queue = dqstate(unquote(state), :queue)
@@ -70,6 +93,7 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.Queue do
     end
   end
 
+  # Backing queue functions returning a tuple {result1, result2, state}
   defmacrop passthrough3(state, do: function) do
     quote do
       queue = dqstate(unquote(state), :queue)
@@ -239,15 +263,13 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.Queue do
   end
 
   def ack(acks, state = dqstate(queue: queue, queue_state: qs)) do
-    acks =
-      case duplicate?(queue) do
-        false -> Enum.map(acks, fn(dqack(tag: ack)) -> ack end)
-        true ->
-          Enum.map(acks, fn(dqack(tag: ack, header: header)) ->
-            maybe_delete_cache_entry(queue, header)
-            ack
-          end)
-      end
+    acks = case duplicate?(queue) do
+             false -> Enum.map(acks, fn(dqack(tag: ack)) -> ack end)
+             true -> Enum.map(acks, fn(dqack(tag: ack, header: header)) ->
+                                       maybe_delete_cache_entry(queue, header)
+                                       ack
+                                    end)
+           end
 
     passthrough2(state, do: ack(acks, qs))
   end
@@ -305,18 +327,13 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.Queue do
   end
 
   def info(atom, dqstate(queue: queue, queue_state: qs)) do
-    case duplicate?(queue) do
-      true -> case passthrough do: info(atom, qs) do
-                queue_info when is_list(queue_info) ->
-                  cache_info = queue
-                  |> amqqueue(:name)
-                  |> Common.cache_name()
-                  |> MessageCache.info()
-
-                  [cache_info: cache_info] ++ queue_info
-                queue_info -> queue_info
-              end
-      false -> passthrough do: info(atom, qs)
+    case passthrough do: info(atom, qs) do
+      queue_info when is_list(queue_info) ->
+        case duplicate?(queue) do
+          true -> [cache_info: cache_info(queue)] ++ queue_info
+          false -> queue_info
+        end
+      queue_info -> queue_info
     end
   end
 
@@ -338,7 +355,7 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.Queue do
   end
 
   def zip_msgs_and_acks(delivered_publish, [ack],
-                        A, dqstate(queue_state: qs)) do
+      A, dqstate(queue_state: qs)) do
     passthrough do: info(delivered_publish, [ack], A, qs)
   end
 
@@ -355,34 +372,41 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.Queue do
 
   # Returns true if the queue supports message deduplication
   # and the message is a duplicate.
-  defp duplicate?(queue = amqqueue(name: name),
-      message = basic_message(content: content(properties: properties))) do
-    ttl = case properties do
-            basic_properties(expiration: ttl) when is_bitstring(ttl) ->
-              String.to_integer(ttl)
-            basic_properties(expiration: :undefined) -> nil
-            :undefined -> nil
-          end
-
+  defp duplicate?(queue = amqqueue(name: name), message = basic_message()) do
     case duplicate?(queue) do
-      true -> Common.duplicate?(name, message, ttl)
+      true -> Common.duplicate?(name, message, message_expiration(message))
       false -> false
     end
   end
 
-  # Remove the message deduplication header from the cache
-  def maybe_delete_cache_entry(queue = amqqueue(), message = basic_message()) do
-    header = Common.message_header(message, "x-deduplication-header")
+  # Returns the expiration property of the given message
+  defp message_expiration(basic_message(content:
+        content(properties: properties))) do
+    case properties do
+      basic_properties(expiration: ttl) when is_bitstring(ttl) ->
+        String.to_integer(ttl)
+      basic_properties(expiration: :undefined) -> nil
+      :undefined -> nil
+    end
+  end
 
+  # Removes the message deduplication header from the cache
+  defp maybe_delete_cache_entry(queue = amqqueue(), msg = basic_message()) do
+    header = Common.message_header(msg, "x-deduplication-header")
     maybe_delete_cache_entry(queue, header)
   end
 
-  def maybe_delete_cache_entry(queue, header) when is_bitstring(header) do
+  defp maybe_delete_cache_entry(queue, header) when is_bitstring(header) do
     queue
     |> amqqueue(:name)
     |> Common.cache_name()
     |> MessageCache.delete(header)
   end
 
-  def maybe_delete_cache_entry(_queue, header) when is_nil(header) do end
+  defp maybe_delete_cache_entry(_queue, header) when is_nil(header) do end
+
+  # Returns the cache information
+  defp cache_info(amqqueue(name: name)) do
+    name |> Common.cache_name() |> MessageCache.info()
+  end
 end

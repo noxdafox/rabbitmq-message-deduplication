@@ -7,6 +7,22 @@
 
 
 defmodule RabbitMQ.MessageDeduplicationPlugin.Exchange do
+  @moduledoc """
+  This module adds support for deduplication exchanges.
+
+  Messages carrying the `x-deduplication-header` header will be deduplicated
+  if a message with the same header value was already seen before.
+
+  When a message is routed within the exchange, it's checked against duplicates.
+  If no duplicate is found, the message is routed and its deduplication header
+  cached. If a TTL was set, the header is removed once expired.
+  If the deduplication cache fills up, old elements will be removed
+  to make space to new onces.
+
+  This module implements the `rabbit_exchange_type` behaviour.
+
+  """
+
   import Record, only: [defrecord: 2, extract: 2]
 
   require RabbitMQ.MessageDeduplicationPlugin.Cache
