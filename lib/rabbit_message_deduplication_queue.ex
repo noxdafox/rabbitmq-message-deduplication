@@ -125,9 +125,10 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.Queue do
   def init(queue = amqqueue(name: name, arguments: args), recovery, callback) do
     if duplicate?(queue) do
       cache = Common.cache_name(name)
-      options = [ttl: Common.cache_argument(args, "x-message-ttl", :number),
-                 persistence: Common.cache_argument(
-                   args, "x-cache-persistence", :atom, "memory")]
+      options = [ttl: Common.rabbit_argument(
+                   args, "x-message-ttl", type: :number),
+                 persistence: Common.rabbit_argument(
+                   args, "x-cache-persistence", type: :atom, default: "memory")]
 
       RabbitLog.debug(
         "Starting queue deduplication cache ~s with options ~p~n",
@@ -145,8 +146,9 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.Queue do
     passthrough1(state, do: terminate(any, qs))
   end
 
-  def delete_and_terminate(
-      any, state = dqstate(queue: queue, queue_state: qs)) do
+  def delete_and_terminate(any, state) do
+    dqstate(queue: queue, queue_state: qs) = state
+
     if duplicate?(queue) do
       cache = queue |> amqqueue(:name) |> Common.cache_name()
 
@@ -188,15 +190,17 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.Queue do
     passthrough1(state, do: batch_publish([publish], pid, flow, qs))
   end
 
-  def publish_delivered(basic_message, message_properties, pid, flow,
-                        state = dqstate(queue_state: qs)) do
+  def publish_delivered(message, message_properties, pid, flow, state) do
+    dqstate(queue_state: qs) = state
+
     passthrough2(state) do
-      publish_delivered(basic_message, message_properties, pid, flow, qs)
+      publish_delivered(message, message_properties, pid, flow, qs)
     end
   end
 
-  def batch_publish_delivered([delivered_publish], pid, flow,
-                              state = dqstate(queue_state: qs)) do
+  def batch_publish_delivered([delivered_publish], pid, flow, state) do
+    dqstate(queue_state: qs) = state
+
     passthrough2(state) do
       batch_publish_delivered([delivered_publish], pid, flow, qs)
     end
@@ -222,54 +226,52 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.Queue do
     passthrough3(state, do: fetchwhile(msg_pred, msg_fun, A, qs))
   end
 
-  def fetch(need_ack, state = dqstate(queue: queue, queue_state: qs)) do
-    case passthrough2(state, do: fetch(need_ack, qs)) do
+  def fetch(needs_ack, state = dqstate(queue: queue, queue_state: qs)) do
+    case passthrough2(state, do: fetch(needs_ack, qs)) do
       {:empty, state} -> {:empty, state}
       {{message, delivery, ack_tag}, state} ->
-        case duplicate?(queue) do
-          false -> {{message, delivery, dqack(tag: ack_tag)}, state}
-          true ->
-            case need_ack do
-              true ->
-                head = Common.message_header(message, "x-deduplication-header")
-                ack = dqack(tag: ack_tag, header: head)
-                {{message, delivery, ack}, state}
-              false ->
-                maybe_delete_cache_entry(queue, message)
-
-                {{message, delivery, dqack(tag: ack_tag)}, state}
-            end
+        if duplicate?(queue) do
+          if needs_ack do
+            head = Common.message_header(message, "x-deduplication-header")
+            {{message, delivery, dqack(tag: ack_tag, header: head)}, state}
+          else
+            maybe_delete_cache_entry(queue, message)
+            {{message, delivery, dqack(tag: ack_tag)}, state}
+          end
+        else
+          {{message, delivery, dqack(tag: ack_tag)}, state}
         end
     end
   end
 
   # TODO: this is a bit of a hack.
   # As the drop callback returns only the message id, we can't retrieve
-  # the message deduplication header. As a workaround fetch is used.
+  # the message deduplication header. As a workaround `fetch` is used.
   # This assumes the backing queue drop and fetch behaviours are the same.
   # A better solution would be to store the message IDs in a dedicated index.
   def drop(need_ack, state = dqstate(queue: queue, queue_state: qs)) do
-    case duplicate?(queue) do
-      false -> passthrough2(state, do: drop(need_ack, qs))
-      true ->
-        case fetch(need_ack, state) do
-          {:empty, state} -> {:empty, state}
-          {{message = basic_message(id: id), _, ack_tag}, state} ->
-            maybe_delete_cache_entry(queue, message)
+    if duplicate?(queue) do
+      case fetch(need_ack, state) do
+        {:empty, state} -> {:empty, state}
+        {{message = basic_message(id: id), _, ack_tag}, state} ->
+          maybe_delete_cache_entry(queue, message)
 
-            {{id, ack_tag}, state}
-        end
+          {{id, ack_tag}, state}
+      end
+    else
+      passthrough2(state, do: drop(need_ack, qs))
     end
   end
 
   def ack(acks, state = dqstate(queue: queue, queue_state: qs)) do
-    acks = case duplicate?(queue) do
-             false -> Enum.map(acks, fn(dqack(tag: ack)) -> ack end)
-             true -> Enum.map(acks, fn(dqack(tag: ack, header: header)) ->
-                                       maybe_delete_cache_entry(queue, header)
-                                       ack
-                                    end)
-           end
+    acks = if duplicate?(queue) do
+      Enum.map(acks, fn(dqack(tag: ack, header: header)) ->
+                        maybe_delete_cache_entry(queue, header)
+                        ack
+                     end)
+    else
+      Enum.map(acks, fn(dqack(tag: ack)) -> ack end)
+    end
 
     passthrough2(state, do: ack(acks, qs))
   end
@@ -329,9 +331,10 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.Queue do
   def info(atom, dqstate(queue: queue, queue_state: qs)) do
     case passthrough do: info(atom, qs) do
       queue_info when is_list(queue_info) ->
-        case duplicate?(queue) do
-          true -> [cache_info: cache_info(queue)] ++ queue_info
-          false -> queue_info
+        if duplicate?(queue) do
+          [cache_info: cache_info(queue)] ++ queue_info
+        else
+          queue_info
         end
       queue_info -> queue_info
     end
@@ -354,8 +357,9 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.Queue do
     passthrough1(state, do: set_queue_mode(queue_mode, qs))
   end
 
-  def zip_msgs_and_acks(delivered_publish, [ack],
-      A, dqstate(queue_state: qs)) do
+  def zip_msgs_and_acks(delivered_publish, [ack], A, state) do
+    dqstate(queue_state: qs) = state
+
     passthrough do: info(delivered_publish, [ack], A, qs)
   end
 
@@ -367,7 +371,7 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.Queue do
 
   # Returns true if the queue supports message deduplication
   defp duplicate?(amqqueue(arguments: args)) do
-    Common.cache_argument(args, "x-message-deduplication", nil, false)
+    Common.rabbit_argument(args, "x-message-deduplication", default: false)
   end
 
   # Returns true if the queue supports message deduplication
@@ -380,8 +384,9 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.Queue do
   end
 
   # Returns the expiration property of the given message
-  defp message_expiration(basic_message(content:
-        content(properties: properties))) do
+  defp message_expiration(message) do
+    basic_message(content: content(properties: properties)) = message
+
     case properties do
       basic_properties(expiration: ttl) when is_bitstring(ttl) ->
         String.to_integer(ttl)

@@ -5,7 +5,6 @@
 # Copyright (c) 2017-2018, Matteo Cafasso.
 # All rights reserved.
 
-
 defmodule RabbitMQ.MessageDeduplicationPlugin.Exchange do
   @moduledoc """
   This module adds support for deduplication exchanges.
@@ -72,9 +71,10 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.Exchange do
   end
 
   def route(exchange(name: name), delivery(message: msg = basic_message())) do
-    case route?(name, msg) do
-      true -> RabbitRouter.match_routing_key(name, [:_])
-      false -> []
+    if route?(name, msg) do
+      RabbitRouter.match_routing_key(name, [:_])
+    else
+      []
     end
   end
 
@@ -130,10 +130,12 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.Exchange do
 
   def create(:transaction, exchange(name: name, arguments: args)) do
     cache = Common.cache_name(name)
-    options = [size: Common.cache_argument(args, "x-cache-size", :number),
-               ttl: Common.cache_argument(args, "x-cache-ttl", :number),
-               persistence: Common.cache_argument(
-                 args, "x-cache-persistence", :atom, "memory")]
+    options = [size: Common.rabbit_argument(
+                 args, "x-cache-size", type: :number),
+               ttl: Common.rabbit_argument(
+                 args, "x-cache-ttl", type: :number),
+               persistence: Common.rabbit_argument(
+                 args, "x-cache-persistence", type: :atom, default: "memory")]
 
     RabbitLog.debug(
       "Starting exchange deduplication cache ~s with options ~p~n",
