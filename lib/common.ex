@@ -78,12 +78,10 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.Common do
     cache = cache_name(name)
 
     case message_header(message, "x-deduplication-header") do
-      key when not is_nil(key) ->
-        case MessageCache.member?(cache, key) do
-          false -> MessageCache.put(cache, key, ttl)
-                   false
-          true -> true
-        end
+      key when not is_nil(key) -> case MessageCache.insert(cache, key, ttl) do
+                                    {:error, :already_exists} -> true
+                                    :ok -> false
+                                  end
       nil -> false
     end
   end
