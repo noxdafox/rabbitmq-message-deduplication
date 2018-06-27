@@ -43,93 +43,82 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.Cache.Test do
     %{cache: cache, cache_ttl: cache_ttl, cache_simple: cache_simple}
   end
 
-  test "basic insertion and lookup",
+  test "basic insertion",
       %{cache: cache, cache_ttl: _, cache_simple: _} do
-    assert MessageCache.member?(cache, "foo") == false
-
-    MessageCache.put(cache, "foo")
-    assert MessageCache.member?(cache, "foo") == true
+    :ok = MessageCache.insert(cache, "foo")
+    {:error, :already_exists} = MessageCache.insert(cache, "foo")
   end
 
   test "TTL at insertion",
       %{cache: cache, cache_ttl: _, cache_simple: _} do
-    assert MessageCache.member?(cache, "foo") == false
-
-    MessageCache.put(cache, "foo", Timer.seconds(1))
-    assert MessageCache.member?(cache, "foo") == true
+    :ok = MessageCache.insert(cache, "foo", Timer.seconds(1))
+    {:error, :already_exists} = MessageCache.insert(cache, "foo")
 
     1 |> Timer.seconds() |> Timer.sleep()
 
-    assert MessageCache.member?(cache, "foo") == false
+    :ok = MessageCache.insert(cache, "foo")
   end
 
   test "TTL at table creation",
       %{cache: _, cache_ttl: cache, cache_simple: _} do
-    assert MessageCache.member?(cache, "foo") == false
-
-    MessageCache.put(cache, "foo")
-    assert MessageCache.member?(cache, "foo") == true
+    :ok = MessageCache.insert(cache, "foo")
+    {:error, :already_exists} = MessageCache.insert(cache, "foo")
 
     1 |> Timer.seconds() |> Timer.sleep()
 
-    assert MessageCache.member?(cache, "foo") == false
+    :ok = MessageCache.insert(cache, "foo")
   end
 
   test "entries are deleted after TTL",
       %{cache: cache, cache_ttl: _, cache_simple: _} do
-    assert MessageCache.member?(cache, "foo") == false
-
-    MessageCache.put(cache, "foo", Timer.seconds(1))
-    assert MessageCache.member?(cache, "foo") == true
+    :ok = MessageCache.insert(cache, "foo", Timer.seconds(1))
+    {:error, :already_exists} = MessageCache.insert(cache, "foo")
 
     Timer.sleep(3200)
 
-    assert Mnesia.transaction(fn -> Mnesia.all_keys(cache) end) == {:atomic, []}
+    {:atomic, []} = Mnesia.transaction(fn -> Mnesia.all_keys(cache) end)
   end
 
   test "entries are deleted if cache is full",
       %{cache: cache, cache_ttl: _, cache_simple: _} do
-    assert MessageCache.member?(cache, "foo") == false
-    assert MessageCache.member?(cache, "bar") == false
+    :ok = MessageCache.insert(cache, "foo")
+    {:error, :already_exists} = MessageCache.insert(cache, "foo")
+    :ok = MessageCache.insert(cache, "bar")
+    {:error, :already_exists} = MessageCache.insert(cache, "bar")
 
-    MessageCache.put(cache, "foo")
-    assert MessageCache.member?(cache, "foo") == true
-    MessageCache.put(cache, "bar")
-    assert MessageCache.member?(cache, "bar") == true
-
-    assert MessageCache.member?(cache, "foo") == false
+    :ok = MessageCache.insert(cache, "foo")
   end
 
   test "cache entry deletion", %{cache: cache, cache_ttl: _, cache_simple: _} do
-    MessageCache.put(cache, "foo")
-    assert MessageCache.member?(cache, "foo") == true
+    :ok = MessageCache.insert(cache, "foo")
+    {:error, :already_exists} = MessageCache.insert(cache, "foo")
 
     MessageCache.delete(cache, "foo")
 
-    assert MessageCache.member?(cache, "foo") == false
+    :ok = MessageCache.insert(cache, "foo")
   end
 
   test "cache information",
       %{cache: cache, cache_ttl: _, cache_simple: _} do
-    MessageCache.put(cache, "foo")
+    :ok = MessageCache.insert(cache, "foo")
 
     [size: 1, bytes: _, entries: 1] = MessageCache.info(cache)
   end
 
   test "simple cache information",
       %{cache: _, cache_ttl: _, cache_simple: cache_simple} do
-    MessageCache.put(cache_simple, "foo")
+    :ok = MessageCache.insert(cache_simple, "foo")
 
     [bytes: _, entries: 1] = MessageCache.info(cache_simple)
   end
 
   test "flush the cache", %{cache: cache, cache_ttl: _, cache_simple: _} do
-    MessageCache.put(cache, "foo")
-    assert MessageCache.member?(cache, "foo") == true
+    :ok = MessageCache.insert(cache, "foo")
+    {:error, :already_exists} = MessageCache.insert(cache, "foo")
 
     :ok = MessageCache.flush(cache)
 
-    assert MessageCache.member?(cache, "foo") == false
+    :ok = MessageCache.insert(cache, "foo")
   end
 
   test "drop the cache", %{cache: cache, cache_ttl: _, cache_simple: _} do
