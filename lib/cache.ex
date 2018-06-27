@@ -46,6 +46,16 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.Cache do
   end
 
   @doc """
+  Insert the given entry into the cache if it doesn't exist.
+  The TTL controls the lifetime in milliseconds of the entry.
+  """
+  @spec insert(atom, any, integer | nil) ::
+    :ok | { :error, :already_exists | any }
+  def insert(cache, entry, ttl \\ nil) do
+    GenServer.call(cache, {:insert, cache, entry, ttl})
+  end
+
+  @doc """
   Delete the given entry from the cache.
   """
   @spec delete(atom, any) :: :ok | { :error, any }
@@ -120,6 +130,39 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.Cache do
     end)
 
     {:reply, :ok, state}
+  end
+
+  # Inserts the entry if it doesn't exist.
+  # If the cache is full, remove an element to make space.
+  def handle_call({:insert, cache, entry, ttl}, _from, state) do
+    function = fn ->
+      entries = Mnesia.read(cache, entry)
+      member? = case List.keyfind(entries, entry, 1) do
+                  {_, _, expiration} ->
+                    if expiration <= Os.system_time(:millisecond) do
+                      Mnesia.delete({cache, entry})
+                      false
+                    else
+                      true
+                    end
+                  nil -> false
+                end
+
+      if member? do
+        {:error, :already_exists}
+      else
+        if cache_full?(cache) do
+          Mnesia.delete({cache, Mnesia.first(cache)})
+        end
+
+        Mnesia.write({cache, entry, entry_expiration(cache, ttl)})
+      end
+    end
+
+    case Mnesia.transaction(function) do
+      {:atomic, retval} -> {:reply, retval, state}
+      {:aborted, reason} -> {:reply, {:error, reason}, state}
+    end
   end
 
   # Removes the given entry from the cache.
