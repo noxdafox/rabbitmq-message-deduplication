@@ -37,15 +37,6 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.Cache do
   end
 
   @doc """
-  Put the given entry into the cache.
-  The TTL controls the lifetime in milliseconds of the entry.
-  """
-  @spec put(atom, any, integer | nil) :: :ok | { :error, any }
-  def put(cache, entry, ttl \\ nil) do
-    GenServer.call(cache, {:put, cache, entry, ttl})
-  end
-
-  @doc """
   Insert the given entry into the cache if it doesn't exist.
   The TTL controls the lifetime in milliseconds of the entry.
   """
@@ -61,14 +52,6 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.Cache do
   @spec delete(atom, any) :: :ok | { :error, any }
   def delete(cache, entry) do
     GenServer.call(cache, {:delete, cache, entry})
-  end
-
-  @doc """
-  True if the entry is contained within the cache.
-  """
-  @spec delete(atom, any) :: boolean
-  def member?(cache, entry) do
-    GenServer.call(cache, {:member?, cache, entry})
   end
 
   @doc """
@@ -118,41 +101,15 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.Cache do
     {:noreply, state}
   end
 
-  # Puts a new entry in the cache.
-  # If the cache is full, remove an element to make space.
-  def handle_call({:put, cache, entry, ttl}, _from, state) do
-    if cache_full?(cache) do
-      cache_delete_first(cache)
-    end
-
-    Mnesia.transaction(fn ->
-      Mnesia.write({cache, entry, entry_expiration(cache, ttl)})
-    end)
-
-    {:reply, :ok, state}
-  end
-
   # Inserts the entry if it doesn't exist.
   # If the cache is full, remove an element to make space.
   def handle_call({:insert, cache, entry, ttl}, _from, state) do
     function = fn ->
-      entries = Mnesia.read(cache, entry)
-      member? = case List.keyfind(entries, entry, 1) do
-                  {_, _, expiration} ->
-                    if expiration <= Os.system_time(:millisecond) do
-                      Mnesia.delete({cache, entry})
-                      false
-                    else
-                      true
-                    end
-                  nil -> false
-                end
-
-      if member? do
+      if cache_member?(cache, entry) do
         {:error, :already_exists}
       else
         if cache_full?(cache) do
-          Mnesia.delete({cache, Mnesia.first(cache)})
+          cache_delete_first(cache)
         end
 
         Mnesia.write({cache, entry, entry_expiration(cache, ttl)})
@@ -172,11 +129,6 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.Cache do
     end)
 
     {:reply, :ok, state}
-  end
-
-  # True if the entry is in the cache.
-  def handle_call({:member?, cache, entry}, _from, state) do
-    {:reply, cache_member?(cache, entry), state}
   end
 
   # Flush the Mnesia cache table.
@@ -228,12 +180,16 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.Cache do
     Mnesia.wait_for_tables([cache], Timer.seconds(30))
   end
 
-  # Mnesia cache lookup. The entry is not returned if expired.
+  # Lookup the entry within the cache, deletes the entry if expired
+  # Must be included within transaction.
   defp cache_member?(cache, entry) do
-    {:atomic, entries} = Mnesia.transaction(fn -> Mnesia.read(cache, entry) end)
-
-    case List.keyfind(entries, entry, 1) do
-      {_, _, expiration} -> expiration > Os.system_time(:millisecond)
+    case cache |> Mnesia.read(entry) |> List.keyfind(entry, 1) do
+      {_, _, expiration} -> if expiration <= Os.system_time(:millisecond) do
+                              Mnesia.delete({cache, entry})
+                              false
+                            else
+                              true
+                            end
       nil -> false
     end
   end
@@ -258,10 +214,12 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.Cache do
 
   # Delete the first element from the cache.
   # As the Mnesia Set is not ordered, the first element is random.
+  # Must be included within transaction.
   defp cache_delete_first(cache) do
-    Mnesia.transaction(fn -> Mnesia.delete({cache, Mnesia.first(cache)}) end)
+    Mnesia.delete({cache, Mnesia.first(cache)})
   end
 
+  # True if the cache is full, false otherwise.
   defp cache_full?(cache) do
     Mnesia.table_info(cache, :size) >= cache_property(cache, :limit)
   end
