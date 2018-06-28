@@ -58,8 +58,9 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.Common do
   Retrieve the given header from the message.
   """
   @spec message_header(basic_message, String.t) :: String.t | nil
-  def message_header(basic_message(content:
-      content(properties: properties)), header) do
+  def message_header(message, header) do
+    basic_message(content: content(properties: properties)) = message
+
     case properties do
       basic_properties(headers: headers) when is_list(headers) ->
         rabbit_keyfind(headers, header)

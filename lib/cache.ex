@@ -102,7 +102,7 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.Cache do
   end
 
   # Inserts the entry if it doesn't exist.
-  # If the cache is full, remove an element to make space.
+  # If the cache is full, it removes an element to make space.
   def handle_call({:insert, cache, entry, ttl}, _from, state) do
     function = fn ->
       if cache_member?(cache, entry) do
