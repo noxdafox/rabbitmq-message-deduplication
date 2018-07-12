@@ -236,10 +236,10 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.Queue do
             {{message, delivery, dqack(tag: ack_tag, header: head)}, state}
           else
             maybe_delete_cache_entry(queue, message)
-            {{message, delivery, dqack(tag: ack_tag)}, state}
+            {{message, delivery, ack_tag}, state}
           end
         else
-          {{message, delivery, dqack(tag: ack_tag)}, state}
+          {{message, delivery, ack_tag}, state}
         end
     end
   end
@@ -263,16 +263,16 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.Queue do
     end
   end
 
-  def ack(acks, state = dqstate(queue: queue, queue_state: qs)) do
-    acks = if duplicate?(queue) do
-      Enum.map(acks, fn(dqack(tag: ack, header: header)) ->
-                        maybe_delete_cache_entry(queue, header)
-                        ack
-                     end)
-    else
-      Enum.map(acks, fn(dqack(tag: ack)) -> ack end)
-    end
+  def ack(acks = [dqack()], state = dqstate(queue: queue, queue_state: qs)) do
+    acks = Enum.map(acks, fn(dqack(tag: ack_tag, header: header)) ->
+                            maybe_delete_cache_entry(queue, header)
+                            ack_tag
+                          end)
 
+    passthrough2(state, do: ack(acks, qs))
+  end
+
+  def ack(acks, state = dqstate(queue_state: qs)) do
     passthrough2(state, do: ack(acks, qs))
   end
 
