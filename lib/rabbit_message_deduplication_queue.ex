@@ -328,16 +328,18 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.Queue do
     passthrough do: msg_rates(qs)
   end
 
-  def info(atom, dqstate(queue: queue, queue_state: qs)) do
-    case passthrough do: info(atom, qs) do
-      queue_info when is_list(queue_info) ->
-        if duplicate?(queue) do
-          [cache_info: cache_info(queue)] ++ queue_info
-        else
-          queue_info
-        end
-      queue_info -> queue_info
+  def info(:backing_queue_status, dqstate(queue: queue, queue_state: qs)) do
+    queue_info = passthrough do: info(:backing_queue_status, qs)
+
+    if duplicate?(queue) do
+      [message_deduplication_cache_info: cache_info(queue)] ++ queue_info
+    else
+      queue_info
     end
+  end
+
+  def info(atom, dqstate(queue_state: qs)) do
+    passthrough do: info(atom, qs)
   end
 
   def invoke(atom, function, state = dqstate(queue_state: qs)) do
@@ -412,6 +414,12 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.Queue do
 
   # Returns the cache information
   defp cache_info(amqqueue(name: name)) do
-    name |> Common.cache_name() |> MessageCache.info()
+    cache = Common.cache_name(name)
+
+    try do
+      MessageCache.info(cache)
+    catch
+      :exit, {:noproc, {GenServer, :call, [^cache | _]}} -> []
+    end
   end
 end
