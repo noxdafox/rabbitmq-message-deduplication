@@ -329,9 +329,11 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.Queue do
   end
 
   def info(:backing_queue_status, dqstate(queue: queue, queue_state: qs)) do
+    amqqueue(arguments: args) = queue
     queue_info = passthrough do: info(:backing_queue_status, qs)
+    priority = Common.rabbit_argument(args, "x-max-priority", default: false)
 
-    if duplicate?(queue) do
+    if duplicate?(queue) and !priority do
       [message_deduplication_cache_info: cache_info(queue)] ++ queue_info
     else
       queue_info
