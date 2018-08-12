@@ -1,9 +1,11 @@
 _build
 deps
 .erlang.mk
-.rabbitmq-components.mk
 *.beam
 log*
 *.plt
 mix.lock
 plugins
+GPATH
+GRTAGS
+GTAGS
