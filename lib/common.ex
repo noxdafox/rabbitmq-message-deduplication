@@ -16,6 +16,7 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.Common do
 
   require RabbitMQ.MessageDeduplicationPlugin.Cache
 
+  alias :rabbit_binary_parser, as: RabbitBinaryParser
   alias RabbitMQ.MessageDeduplicationPlugin.Cache, as: MessageCache
 
   defrecord :content, extract(
@@ -58,14 +59,13 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.Common do
   Retrieve the given header from the message.
   """
   @spec message_header(basic_message, String.t) :: String.t | nil
-  def message_header(message, header) do
-    basic_message(content: content(properties: properties)) = message
+  def message_header(basic_message(content: message_content), header) do
+    message_content = RabbitBinaryParser.ensure_content_decoded(message_content)
 
-    case properties do
+    case content(message_content, :properties) do
       basic_properties(headers: headers) when is_list(headers) ->
         rabbit_keyfind(headers, header)
       basic_properties(headers: :undefined) -> nil
-      :undefined -> nil
     end
   end
 
