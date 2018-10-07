@@ -17,12 +17,12 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.Supervisor do
     :rabbit_boot_step,
     accumulate: true, persist: true
 
-  @rabbit_boot_step {__MODULE__,
-                     [{:description,
-                       "message deduplication plugin cache supervisor"},
-                      {:mfa, {__MODULE__, :start_link, []}},
-                      {:requires, :database},
-                      {:enables, :external_infrastructure}]}
+  @rabbit_boot_step {
+    __MODULE__,
+    [description: "message deduplication plugin cache supervisor",
+     mfa: {__MODULE__, :start_link, []},
+     requires: :database,
+     enables: :external_infrastructure]}
 
   @doc """
   Start the Supervisor process.
