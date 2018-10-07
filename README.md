@@ -20,6 +20,8 @@ Enable the plugin:
     [sudo] rabbitmq-plugins enable rabbitmq_message_deduplication
 ```
 
+Restart RabbitMQ
+
 ## Building from Source
 
 Please see RabbitMQ Plugin Development guide.
@@ -37,6 +39,8 @@ Then copy all the *.ez files inside the plugins folder to the [RabbitMQ plugins 
 ```bash
     [sudo] rabbitmq-plugins enable rabbitmq_message_deduplication
 ```
+
+Restart RabbitMQ
 
 ## Exchange level deduplication
 
