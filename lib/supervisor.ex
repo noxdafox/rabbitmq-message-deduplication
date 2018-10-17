@@ -20,7 +20,7 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.Supervisor do
   @rabbit_boot_step {
     __MODULE__,
     [description: "message deduplication plugin cache supervisor",
-     mfa: {__MODULE__, :start_link, []},
+     mfa: {:rabbit_sup, :start_child, [__MODULE__]},
      requires: :database,
      enables: :external_infrastructure]}
 
@@ -28,10 +28,7 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.Supervisor do
   Start the Supervisor process.
   """
   def start_link() do
-    case DynamicSupervisor.start_link(__MODULE__, [], name: __MODULE__) do
-      {:ok, _pid} -> :ok
-      _ -> :error
-    end
+    DynamicSupervisor.start_link(__MODULE__, [], name: __MODULE__)
   end
 
   @doc """
