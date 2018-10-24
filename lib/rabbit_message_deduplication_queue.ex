@@ -276,6 +276,12 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.Queue do
     passthrough2(state, do: ack(acks, qs))
   end
 
+  def requeue(acks = [dqack()], state = dqstate(queue_state: qs)) do
+    acks = Enum.map(acks, fn(dqack(tag: ack_tag)) -> ack_tag end)
+
+    passthrough2(state, do: requeue(acks, qs))
+  end
+
   def requeue([ack], state = dqstate(queue_state: qs)) do
     passthrough2(state, do: requeue([ack], qs))
   end
