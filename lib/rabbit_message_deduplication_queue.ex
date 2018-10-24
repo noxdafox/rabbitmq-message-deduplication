@@ -186,8 +186,8 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.Queue do
     end
   end
 
-  def batch_publish([publish], pid, flow, state = dqstate(queue_state: qs)) do
-    passthrough1(state, do: batch_publish([publish], pid, flow, qs))
+  def batch_publish(batch, pid, flow, state = dqstate(queue_state: qs)) do
+    passthrough1(state, do: batch_publish(batch, pid, flow, qs))
   end
 
   def publish_delivered(message, message_properties, pid, flow, state) do
@@ -198,11 +198,11 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.Queue do
     end
   end
 
-  def batch_publish_delivered([delivered_publish], pid, flow, state) do
+  def batch_publish_delivered(batch, pid, flow, state) do
     dqstate(queue_state: qs) = state
 
     passthrough2(state) do
-      batch_publish_delivered([delivered_publish], pid, flow, qs)
+      batch_publish_delivered(batch, pid, flow, qs)
     end
   end
 
@@ -263,7 +263,8 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.Queue do
     end
   end
 
-  def ack(acks = [dqack()], state = dqstate(queue: queue, queue_state: qs)) do
+  def ack(acks = [dqack() | _], state) do
+    dqstate(queue: queue, queue_state: qs) = state
     acks = Enum.map(acks, fn(dqack(tag: ack_tag, header: header)) ->
                             maybe_delete_cache_entry(queue, header)
                             ack_tag
@@ -276,25 +277,25 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.Queue do
     passthrough2(state, do: ack(acks, qs))
   end
 
-  def requeue(acks = [dqack()], state = dqstate(queue_state: qs)) do
+  def requeue(acks = [dqack() | _], state = dqstate(queue_state: qs)) do
     acks = Enum.map(acks, fn(dqack(tag: ack_tag)) -> ack_tag end)
 
     passthrough2(state, do: requeue(acks, qs))
   end
 
-  def requeue([ack], state = dqstate(queue_state: qs)) do
-    passthrough2(state, do: requeue([ack], qs))
+  def requeue(acks, state = dqstate(queue_state: qs)) do
+    passthrough2(state, do: requeue(acks, qs))
   end
 
-  def ackfold(function, A, state, acks = [dqack()]) do
+  def ackfold(function, A, state, acks = [dqack() | _]) do
     dqstate(queue_state: qs) = state
     acks = Enum.map(acks, fn(dqack(tag: ack_tag)) -> ack_tag end)
 
     passthrough2(state, do: ackfold(function, A, qs, acks))
   end
 
-  def ackfold(function, A, state = dqstate(queue_state: qs), [ack]) do
-    passthrough2(state, do: ackfold(function, A, qs, [ack]))
+  def ackfold(function, A, state = dqstate(queue_state: qs), acks) do
+    passthrough2(state, do: ackfold(function, A, qs, acks))
   end
 
   def fold(function, A, state = dqstate(queue_state: qs)) do
@@ -374,17 +375,17 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.Queue do
     passthrough1(state, do: set_queue_mode(queue_mode, qs))
   end
 
-  def zip_msgs_and_acks(delivered_publish, acks = [dqack()], A, state) do
+  def zip_msgs_and_acks(delivered_publish, acks = [dqack() | _], A, state) do
     dqstate(queue_state: qs) = state
     acks = Enum.map(acks, fn(dqack(tag: ack_tag)) -> ack_tag end)
 
     passthrough do: info(delivered_publish, acks, A, qs)
   end
 
-  def zip_msgs_and_acks(delivered_publish, [ack], A, state) do
+  def zip_msgs_and_acks(delivered_publish, acks, A, state) do
     dqstate(queue_state: qs) = state
 
-    passthrough do: info(delivered_publish, [ack], A, qs)
+    passthrough do: info(delivered_publish, acks, A, qs)
   end
 
   def handle_info(term, state = dqstate(queue_state: qs)) do
