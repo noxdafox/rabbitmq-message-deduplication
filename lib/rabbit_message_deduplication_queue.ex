@@ -374,6 +374,13 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.Queue do
     passthrough1(state, do: set_queue_mode(queue_mode, qs))
   end
 
+  def zip_msgs_and_acks(delivered_publish, acks = [dqack()], A, state) do
+    dqstate(queue_state: qs) = state
+    acks = Enum.map(acks, fn(dqack(tag: ack_tag)) -> ack_tag end)
+
+    passthrough do: info(delivered_publish, acks, A, qs)
+  end
+
   def zip_msgs_and_acks(delivered_publish, [ack], A, state) do
     dqstate(queue_state: qs) = state
 
