@@ -372,11 +372,9 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.Queue do
   end
 
   def is_duplicate(message, state = dqstate(queue: queue, queue_state: qs)) do
-    duplicate = duplicate?(queue, message)
-
     case passthrough2(state, do: is_duplicate(message, qs)) do
       {true, state} -> {true, state}
-      {false, state} -> {duplicate, state}
+      {false, state} -> {duplicate?(queue, message), state}
     end
   end
 
