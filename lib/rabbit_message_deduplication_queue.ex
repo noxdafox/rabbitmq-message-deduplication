@@ -190,11 +190,20 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.Queue do
     passthrough1(state, do: batch_publish(batch, pid, flow, qs))
   end
 
+  # Optimization for cases in which the queue is empty and the message
+  # is delivered straight to the client. Acknowledgement is enabled.
   def publish_delivered(message, message_properties, pid, flow, state) do
-    dqstate(queue_state: qs) = state
+    dqstate(queue: queue, queue_state: qs) = state
 
-    passthrough2(state) do
+    {ack_tag, state} = passthrough2(state) do
       publish_delivered(message, message_properties, pid, flow, qs)
+    end
+
+    if duplicate?(queue) do
+      head = Common.message_header(message, "x-deduplication-header")
+      {dqack(tag: ack_tag, header: head), state}
+    else
+      {ack_tag, state}
     end
   end
 
