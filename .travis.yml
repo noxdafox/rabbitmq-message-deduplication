@@ -6,5 +6,4 @@ otp_release:
 script: make tests
 branches:
   only:
-    - master
     - v3.7.x
