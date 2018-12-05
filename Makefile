@@ -1,6 +1,8 @@
 PROJECT = rabbitmq_message_deduplication
 
 DEPS = rabbit_common rabbit
+dep_rabbit_common = git https://github.com/rabbitmq/rabbitmq-common v3.7.x
+dep_rabbit = git https://github.com/rabbitmq/rabbitmq-server v3.7.x
 TEST_DEPS = rabbitmq_ct_helpers rabbitmq_ct_client_helpers amqp_client
 
 DEP_PLUGINS = rabbit_common/mk/rabbitmq-plugin.mk
