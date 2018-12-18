@@ -2,7 +2,7 @@ dist: xenial
 language: elixir
 elixir: '1.6.6'
 otp_release:
-  - '20.0'
+  - '21.0'
 script: make tests
 branches:
   only:
