@@ -409,8 +409,11 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.Queue do
   # Returns true if the queue supports message deduplication
   # and the message is a duplicate.
   defp duplicate?(queue = amqqueue(name: name), message = basic_message()) do
-    case duplicate?(queue) do
-      true -> Common.duplicate?(name, message, message_expiration(message))
+    with true <- duplicate?(queue),
+         true <- Common.duplicate?(name, message, message_expiration(message))
+    do
+      {true, :reject}
+    else
       false -> false
     end
   end
