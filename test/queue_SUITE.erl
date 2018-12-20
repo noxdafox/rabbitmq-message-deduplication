@@ -67,13 +67,16 @@ end_per_testcase(Testcase, Config) ->
 deduplicate_message(Config) ->
     Get = #'basic.get'{queue = <<"test">>},
     Channel = rabbit_ct_client_helpers:open_channel(Config),
+    #'confirm.select_ok'{} = amqp_channel:call(Channel, #'confirm.select'{}),
 
     #'queue.declare_ok'{} = amqp_channel:call(Channel, make_queue(<<"test">>)),
     bind_new_exchange(Channel, <<"test">>, <<"test">>),
 
     %% Deduplication header present
     publish_message(Channel, <<"test">>, "deduplicate-this"),
+    true = amqp_channel:wait_for_confirms(Channel, 1),
     publish_message(Channel, <<"test">>, "deduplicate-this"),
+    false = amqp_channel:wait_for_confirms(Channel, 1),
 
     {#'basic.get_ok'{}, _} = amqp_channel:call(Channel, Get),
     #'basic.get_empty'{} = amqp_channel:call(Channel, Get),
@@ -153,11 +156,13 @@ queue_overflow(Config) ->
 make_queue(Q) ->
     #'queue.declare'{
        queue       = Q,
+       durable     = true,
        arguments   = [{<<"x-message-deduplication">>, bool, true}]}.
 
 make_queue(Q, Args) ->
     #'queue.declare'{
        queue       = Q,
+       durable     = true,
        arguments   = [{<<"x-message-deduplication">>, bool, true} | Args]}.
 
 bind_new_exchange(Ch, Ex, Q) ->
@@ -173,14 +178,15 @@ publish_message(Ch, Ex) ->
     amqp_channel:cast(Ch, Publish, Msg).
 
 publish_message(Ch, Ex, D) ->
-    Props = #'P_basic'{headers = [{<<"x-deduplication-header">>, longstr, D}]},
+    Props = #'P_basic'{headers = [{<<"x-deduplication-header">>, longstr, D}],
+                       delivery_mode = 2},
     Publish = #'basic.publish'{exchange = Ex, routing_key = <<"#">>},
     Msg = #amqp_msg{props = Props, payload = <<"payload">>},
     amqp_channel:cast(Ch, Publish, Msg).
 
 publish_message(Ch, Ex, D, E) ->
     Props = #'P_basic'{headers = [{<<"x-deduplication-header">>, longstr, D}],
-                       expiration = E},
+                       delivery_mode = 2, expiration = E},
     Publish = #'basic.publish'{exchange = Ex, routing_key = <<"#">>},
     Msg = #amqp_msg{props = Props, payload = <<"payload">>},
     amqp_channel:cast(Ch, Publish, Msg).
