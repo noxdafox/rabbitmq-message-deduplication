@@ -8,3 +8,4 @@ branches:
   only:
     - master
     - v3.7.x
+    - v3.8.x
