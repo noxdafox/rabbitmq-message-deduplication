@@ -231,8 +231,8 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.Queue do
 
   # The fetchwhile callback handles message TTL dead lettering.
   # The duplicates cache TTL mechanism is used instead.
-  def fetchwhile(msg_pred, msg_fun, A, state = dqstate(queue_state: qs)) do
-    passthrough3(state, do: fetchwhile(msg_pred, msg_fun, A, qs))
+  def fetchwhile(msg_pred, msg_fun, acc, state = dqstate(queue_state: qs)) do
+    passthrough3(state, do: fetchwhile(msg_pred, msg_fun, acc, qs))
   end
 
   def fetch(needs_ack, state = dqstate(queue: queue, queue_state: qs)) do
@@ -296,19 +296,19 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.Queue do
     passthrough2(state, do: requeue(acks, qs))
   end
 
-  def ackfold(function, A, state, acks = [dqack() | _]) do
+  def ackfold(function, acc, state, acks = [dqack() | _]) do
     dqstate(queue_state: qs) = state
     acks = Enum.map(acks, fn(dqack(tag: ack_tag)) -> ack_tag end)
 
-    passthrough2(state, do: ackfold(function, A, qs, acks))
+    passthrough2(state, do: ackfold(function, acc, qs, acks))
   end
 
-  def ackfold(function, A, state = dqstate(queue_state: qs), acks) do
-    passthrough2(state, do: ackfold(function, A, qs, acks))
+  def ackfold(function, acc, state = dqstate(queue_state: qs), acks) do
+    passthrough2(state, do: ackfold(function, acc, qs, acks))
   end
 
-  def fold(function, A, state = dqstate(queue_state: qs)) do
-    passthrough2(state, do: fold(function, A, qs))
+  def fold(function, acc, state = dqstate(queue_state: qs)) do
+    passthrough2(state, do: fold(function, acc, qs))
   end
 
   def len(dqstate(queue_state: qs)) do
@@ -382,17 +382,17 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.Queue do
     passthrough1(state, do: set_queue_mode(queue_mode, qs))
   end
 
-  def zip_msgs_and_acks(delivered_publish, acks = [dqack() | _], A, state) do
+  def zip_msgs_and_acks(delivered_publish, acks = [dqack() | _], acc, state) do
     dqstate(queue_state: qs) = state
     acks = Enum.map(acks, fn(dqack(tag: ack_tag)) -> ack_tag end)
 
-    passthrough do: info(delivered_publish, acks, A, qs)
+    passthrough do: info(delivered_publish, acks, acc, qs)
   end
 
-  def zip_msgs_and_acks(delivered_publish, acks, A, state) do
+  def zip_msgs_and_acks(delivered_publish, acks, acc, state) do
     dqstate(queue_state: qs) = state
 
-    passthrough do: info(delivered_publish, acks, A, qs)
+    passthrough do: info(delivered_publish, acks, acc, qs)
   end
 
   def handle_info(term, state = dqstate(queue_state: qs)) do
