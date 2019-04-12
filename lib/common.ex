@@ -17,7 +17,7 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.Common do
   require RabbitMQ.MessageDeduplicationPlugin.Cache
 
   alias :rabbit_binary_parser, as: RabbitBinaryParser
-  alias RabbitMQ.MessageDeduplicationPlugin.Cache, as: MessageCache
+  alias RabbitMQ.MessageDeduplicationPlugin.Cache, as: Cache
 
   defrecord :content, extract(
     :content, from_lib: "rabbit_common/include/rabbit.hrl")
@@ -79,9 +79,9 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.Common do
     cache = cache_name(name)
 
     case message_header(message, "x-deduplication-header") do
-      key when not is_nil(key) -> case MessageCache.insert(cache, key, ttl) do
-                                    {:error, :already_exists} -> true
-                                    :ok -> false
+      key when not is_nil(key) -> case Cache.insert(cache, key, ttl) do
+                                    {:ok, :exists} -> true
+                                    {:ok, :inserted} -> false
                                   end
       nil -> false
     end
