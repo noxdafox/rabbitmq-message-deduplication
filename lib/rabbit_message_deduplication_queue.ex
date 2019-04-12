@@ -2,7 +2,7 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 #
-# Copyright (c) 2017-2018, Matteo Cafasso.
+# Copyright (c) 2017-2019, Matteo Cafasso.
 # All rights reserved.
 
 defmodule RabbitMQ.MessageDeduplicationPlugin.Queue do
@@ -26,12 +26,11 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.Queue do
 
   require RabbitMQ.MessageDeduplicationPlugin.Cache
   require RabbitMQ.MessageDeduplicationPlugin.Common
-  require RabbitMQ.MessageDeduplicationPlugin.Supervisor
 
   alias :rabbit_log, as: RabbitLog
-  alias RabbitMQ.MessageDeduplicationPlugin.Cache, as: MessageCache
   alias RabbitMQ.MessageDeduplicationPlugin.Common, as: Common
-  alias RabbitMQ.MessageDeduplicationPlugin.Supervisor, as: CacheSupervisor
+  alias RabbitMQ.MessageDeduplicationPlugin.Cache, as: Cache
+  alias RabbitMQ.MessageDeduplicationPlugin.CacheManager, as: CacheManager
 
   @behaviour :rabbit_backing_queue
 
@@ -40,8 +39,7 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.Queue do
     accumulate: true, persist: true
 
   @rabbit_boot_step {__MODULE__,
-                     [{:description,
-                       "message deduplication queue: supervisor"},
+                     [{:description, "message deduplication queue"},
                       {:mfa, {__MODULE__, :enable_deduplication_queues, []}},
                       {:requires, :database},
                       {:enables, :external_infrastructure}]}
@@ -134,7 +132,7 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.Queue do
         "Starting queue deduplication cache ~s with options ~p~n",
         [cache, options])
 
-      CacheSupervisor.start_cache(cache, options)
+      CacheManager.create(cache, options)
     end
 
     passthrough1(dqstate(queue: queue)) do
@@ -150,10 +148,7 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.Queue do
     dqstate(queue: queue, queue_state: qs) = state
 
     if duplicate?(queue) do
-      cache = queue |> amqqueue(:name) |> Common.cache_name()
-
-      :ok = MessageCache.drop(cache)
-      :ok = CacheSupervisor.stop_cache(cache)
+      queue |> amqqueue(:name) |> Common.cache_name() |> CacheManager.destroy()
     end
 
     passthrough1(state) do
@@ -169,7 +164,7 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.Queue do
     if duplicate?(queue) do
       cache = queue |> amqqueue(:name) |> Common.cache_name()
 
-      :ok = MessageCache.flush(cache)
+      :ok = Cache.flush(cache)
     end
 
     passthrough2(state, do: purge(qs))
@@ -437,7 +432,7 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.Queue do
     queue
     |> amqqueue(:name)
     |> Common.cache_name()
-    |> MessageCache.delete(header)
+    |> Cache.delete(header)
   end
 
   defp maybe_delete_cache_entry(_queue, header) when is_nil(header) do end
@@ -447,7 +442,7 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.Queue do
     cache = Common.cache_name(name)
 
     try do
-      MessageCache.info(cache)
+      Cache.info(cache)
     catch
       :exit, {:noproc, {GenServer, :call, [^cache | _]}} -> []
     end
