@@ -2,7 +2,7 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 #
-# Copyright (c) 2017-2018, Matteo Cafasso.
+# Copyright (c) 2017-2019, Matteo Cafasso.
 # All rights reserved.
 
 defmodule RabbitMQ.MessageDeduplicationPlugin.Cache.Test do
@@ -69,7 +69,7 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.Cache.Test do
     {:ok, :inserted} = Cache.insert(cache, "foo", Timer.seconds(1))
     {:ok, :exists} = Cache.insert(cache, "foo")
 
-    Timer.sleep(3200)
+    Timer.sleep(1200)
 
     :ok = Cache.delete_expired_entries(cache)
 
