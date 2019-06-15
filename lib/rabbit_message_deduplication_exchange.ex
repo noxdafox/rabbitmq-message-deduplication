@@ -79,7 +79,7 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.Exchange do
 
   def validate(exchange(arguments: args)) do
     case List.keyfind(args, "x-cache-size", 0) do
-      {"x-cache-size", :long, val} when val > 0 -> :ok
+      {"x-cache-size", _, val} when is_integer(val) and val > 0 -> :ok
       {"x-cache-size", :longstr, val} ->
         case Integer.parse(val, 10) do
           :error -> RabbitMisc.protocol_error(
@@ -97,7 +97,7 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.Exchange do
 
     case List.keyfind(args, "x-cache-ttl", 0) do
       nil -> :ok
-      {"x-cache-ttl", :long, val} when val > 0 -> :ok
+      {"x-cache-ttl", _, val} when is_integer(val) and val > 0 -> :ok
       {"x-cache-ttl", :longstr, val} ->
         case Integer.parse(val, 10) do
           :error -> RabbitMisc.protocol_error(
