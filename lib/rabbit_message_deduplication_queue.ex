@@ -428,7 +428,7 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.Queue do
     maybe_delete_cache_entry(queue, header)
   end
 
-  defp maybe_delete_cache_entry(queue, header) when is_bitstring(header) do
+  defp maybe_delete_cache_entry(queue, header) when not is_nil(header) do
     queue
     |> amqqueue(:name)
     |> Common.cache_name()
