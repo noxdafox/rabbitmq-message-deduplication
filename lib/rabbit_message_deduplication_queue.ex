@@ -444,6 +444,7 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.Queue do
     try do
       Cache.info(cache)
     catch
+      :exit, {:aborted, {:no_exists, ^cache, _}} -> []
       :exit, {:noproc, {GenServer, :call, [^cache | _]}} -> []
     end
   end
