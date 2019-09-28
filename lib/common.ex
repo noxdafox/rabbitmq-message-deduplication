@@ -22,9 +22,6 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.Common do
   defrecord :content, extract(
     :content, from_lib: "rabbit_common/include/rabbit.hrl")
 
-  defrecord :amqqueue, extract(
-    :amqqueue, from_lib: "rabbit_common/include/rabbit.hrl")
-
   @type basic_message :: record(:basic_message)
   defrecord :basic_message, extract(
     :basic_message, from_lib: "rabbit_common/include/rabbit.hrl")
