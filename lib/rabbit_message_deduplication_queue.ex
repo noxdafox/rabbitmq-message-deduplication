@@ -27,6 +27,7 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.Queue do
   require RabbitMQ.MessageDeduplicationPlugin.Cache
   require RabbitMQ.MessageDeduplicationPlugin.Common
 
+  alias :amqqueue, as: AMQQueue
   alias :rabbit_log, as: RabbitLog
   alias RabbitMQ.MessageDeduplicationPlugin.Common, as: Common
   alias RabbitMQ.MessageDeduplicationPlugin.Cache, as: Cache
@@ -46,9 +47,6 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.Queue do
 
   defrecord :content, extract(
     :content, from_lib: "rabbit_common/include/rabbit.hrl")
-
-  defrecord :amqqueue, extract(
-    :amqqueue, from_lib: "rabbit_common/include/rabbit.hrl")
 
   defrecord :basic_message, extract(
     :basic_message, from_lib: "rabbit_common/include/rabbit.hrl")
@@ -120,7 +118,10 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.Queue do
     passthrough do: stop(vhost)
   end
 
-  def init(queue = amqqueue(name: name, arguments: args), recovery, callback) do
+  def init(queue, recovery, callback) do
+    name = AMQQueue.get_name(queue)
+    args = AMQQueue.get_arguments(queue)
+
     if duplicate?(queue) do
       cache = Common.cache_name(name)
       options = [ttl: Common.rabbit_argument(
@@ -148,7 +149,10 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.Queue do
     dqstate(queue: queue, queue_state: qs) = state
 
     if duplicate?(queue) do
-      queue |> amqqueue(:name) |> Common.cache_name() |> CacheManager.destroy()
+      queue
+      |> AMQQueue.get_name()
+      |> Common.cache_name()
+      |> CacheManager.destroy()
     end
 
     passthrough1(state) do
@@ -162,7 +166,7 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.Queue do
 
   def purge(state = dqstate(queue: queue, queue_state: qs)) do
     if duplicate?(queue) do
-      cache = queue |> amqqueue(:name) |> Common.cache_name()
+      cache = queue |> AMQQueue.get_name() |> Common.cache_name()
 
       :ok = Cache.flush(cache)
     end
@@ -347,7 +351,7 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.Queue do
   end
 
   def info(:backing_queue_status, dqstate(queue: queue, queue_state: qs)) do
-    amqqueue(arguments: args) = queue
+    args = AMQQueue.get_arguments(queue)
     queue_info = passthrough do: info(:backing_queue_status, qs)
     priority = Common.rabbit_argument(args, "x-max-priority", default: false)
 
@@ -397,13 +401,17 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.Queue do
   # Utility functions
 
   # Returns true if the queue supports message deduplication
-  defp duplicate?(amqqueue(arguments: args)) do
+  defp duplicate?(queue) do
+    args = AMQQueue.get_arguments(queue)
+
     Common.rabbit_argument(args, "x-message-deduplication", default: false)
   end
 
   # Returns true if the queue supports message deduplication
   # and the message is a duplicate.
-  defp duplicate?(queue = amqqueue(name: name), message = basic_message()) do
+  defp duplicate?(queue, message = basic_message()) do
+    name = AMQQueue.get_name(queue)
+
     case duplicate?(queue) do
       true -> Common.duplicate?(name, message, message_expiration(message))
       false -> false
@@ -423,14 +431,14 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.Queue do
   end
 
   # Removes the message deduplication header from the cache
-  defp maybe_delete_cache_entry(queue = amqqueue(), msg = basic_message()) do
+  defp maybe_delete_cache_entry(queue, msg = basic_message()) do
     header = Common.message_header(msg, "x-deduplication-header")
     maybe_delete_cache_entry(queue, header)
   end
 
   defp maybe_delete_cache_entry(queue, header) when not is_nil(header) do
     queue
-    |> amqqueue(:name)
+    |> AMQQueue.get_name()
     |> Common.cache_name()
     |> Cache.delete(header)
   end
@@ -438,7 +446,8 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.Queue do
   defp maybe_delete_cache_entry(_queue, header) when is_nil(header) do end
 
   # Returns the cache information
-  defp cache_info(amqqueue(name: name)) do
+  defp cache_info(queue) do
+    name = AMQQueue.get_name(queue)
     cache = Common.cache_name(name)
 
     try do
