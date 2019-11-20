@@ -66,7 +66,7 @@ Extra arguments:
 
 A queue declared with the `x-message-deduplication` parameter enabled will filter message duplicates before they are published within.
 
-Each message containing the `x-deduplication-header` header will not be enqueued if another message with the same header is already present within the queue.
+Each message containing the `x-message-deduplication` header will not be enqueued if another message with the same header is already present within the queue.
 
 ### Declare a queue
 
