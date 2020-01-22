@@ -1,6 +1,6 @@
 dist: xenial
 language: elixir
-elixir: '1.8.0'
+elixir: '1.8.2'
 otp_release:
   - '21.0'
 script: make tests current_rmq_ref=$TRAVIS_BRANCH
