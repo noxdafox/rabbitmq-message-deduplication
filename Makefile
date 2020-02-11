@@ -1,5 +1,7 @@
 PROJECT = rabbitmq_message_deduplication
 
+override current_rmq_ref := v3.7.16
+
 BUILD_DEPS = rabbitmq_cli
 DEPS = rabbit_common rabbit
 TEST_DEPS = rabbitmq_ct_helpers rabbitmq_ct_client_helpers amqp_client
