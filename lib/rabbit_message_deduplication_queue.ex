@@ -296,8 +296,11 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.Queue do
   end
 
   def ackfold(function, acc, state, acks = [dqack() | _]) do
-    dqstate(queue_state: qs) = state
-    acks = Enum.map(acks, fn(dqack(tag: ack_tag)) -> ack_tag end)
+    dqstate(queue: queue, queue_state: qs) = state
+    acks = Enum.map(acks, fn(dqack(tag: ack_tag, header: header)) ->
+                            maybe_delete_cache_entry(queue, header)
+                            ack_tag
+                          end)
 
     passthrough2(state, do: ackfold(function, acc, qs, acks))
   end
