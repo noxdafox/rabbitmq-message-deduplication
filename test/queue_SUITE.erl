@@ -24,7 +24,8 @@ groups() ->
                                deduplicate_message,
                                deduplicate_message_ttl,
                                message_acknowledged,
-                               queue_overflow
+                               queue_overflow,
+                               dead_letter
                               ]}
     ].
 
@@ -171,6 +172,25 @@ queue_overflow(Config) ->
                                               <<"deduplicate-this">>}
                                             ]
                                  }}} = amqp_channel:call(Channel, Get).
+
+dead_letter(Config) ->
+    Get = #'basic.get'{queue = <<"test">>},
+    Channel = rabbit_ct_client_helpers:open_channel(Config),
+
+    Args = [{<<"x-dead-letter-exchange">>, longstr, "amq.direct"}],
+    #'queue.declare_ok'{} = amqp_channel:call(Channel,
+                                              make_queue(<<"test">>, Args)),
+    bind_new_exchange(Channel, <<"test">>, <<"test">>),
+
+    publish_message(Channel, <<"test">>, "deduplicate-this"),
+
+    {#'basic.get_ok'{delivery_tag = Tag}, _} = amqp_channel:call(Channel, Get),
+
+    amqp_channel:cast(Channel, #'basic.reject'{delivery_tag = Tag, requeue = false}),
+
+    publish_message(Channel, <<"test">>, "deduplicate-this"),
+
+    {#'basic.get_ok'{}, _} = amqp_channel:call(Channel, Get).
 
 %% -------------------------------------------------------------------
 %% Utility functions.
