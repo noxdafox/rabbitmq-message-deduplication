@@ -69,6 +69,8 @@ A queue declared with the `x-message-deduplication` parameter enabled will filte
 
 Each message containing the `x-deduplication-header` header will not be enqueued if another message with the same header is already present within the queue.
 
+> **_NOTE:_**  Mirrored and Quorum queues are currently not supported.
+
 ### Declare a queue
 
 When declaring a queue, it is possible to enable message deduplication via the `x-message-deduplication` boolean argument.
