@@ -73,11 +73,6 @@ Each message containing the `x-deduplication-header` header will not be enqueued
 
 When declaring a queue, it is possible to enable message deduplication via the `x-message-deduplication` boolean argument.
 
-Extra arguments:
-
-  * `x-cache-persistence`: whether the duplicates cache will persist on disk or in memory.
-    This parameter is optional. Default persistence type is `memory`.
-
 ### Message headers
 
   * `x-deduplication-header`: messages will be deduplicated based on the content of this header. If the header is not provided, the message will not be checked against duplicates.
