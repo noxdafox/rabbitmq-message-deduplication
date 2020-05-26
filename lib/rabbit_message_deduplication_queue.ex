@@ -126,14 +126,14 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.Queue do
       cache = Common.cache_name(name)
       options = [ttl: Common.rabbit_argument(
                    args, "x-message-ttl", type: :number),
-                 persistence: Common.rabbit_argument(
-                   args, "x-cache-persistence", type: :atom, default: "memory")]
+                 persistence: :memory]
 
       RabbitLog.debug(
         "Starting queue deduplication cache ~s with options ~p~n",
         [cache, options])
 
-      CacheManager.create(cache, options)
+      :ok = CacheManager.create(cache, options)
+      :ok = Cache.flush(cache)
     end
 
     passthrough1(dqstate(queue: queue)) do
