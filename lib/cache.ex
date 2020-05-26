@@ -140,18 +140,6 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.Cache do
 
   ## Utility functions
 
-  # Run Mnesia creation functions handling output
-  defmacro mnesia_create(function) do
-    quote do
-      case unquote(function) do
-        {:atomic, :ok} -> :ok
-        {:aborted, {:already_exists, _}} -> :ok
-        {:aborted, {:already_exists, _, _}} -> :ok
-        error -> error
-      end
-    end
-  end
-
   # Mnesia cache table creation.
   defp cache_create(cache, options) do
     persistence = case Keyword.get(options, :persistence) do
@@ -159,16 +147,16 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.Cache do
                     :memory -> :ram_copies
                   end
     options = [{:attributes, [:entry, :expiration]},
-               {persistence, [node()]},
+               {persistence, cache_replicas()},
                {:index, [:expiration]},
                {:user_properties, [{:limit, Keyword.get(options, :size)},
                                    {:default_ttl, Keyword.get(options, :ttl)}]}]
 
-    with :ok <- mnesia_create(Mnesia.create_table(cache, options)),
-         :ok <- mnesia_create(Mnesia.add_table_copy(cache, node(), persistence))
-    do
-      Mnesia.wait_for_tables([cache], @table_wait_time)
-    else
+    case Mnesia.create_table(cache, options) do
+      {:atomic, :ok} ->
+        Mnesia.wait_for_tables([cache], @table_wait_time)
+      {:aborted, {:already_exists, _}} ->
+        Mnesia.wait_for_tables([cache], @table_wait_time)
       error -> error
     end
   end
@@ -218,5 +206,12 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.Cache do
       |> Enum.find(fn(element) -> match?({^property, _}, element) end)
 
     entry
+  end
+
+  # List the nodes on which to create the cache replicas.
+  # Cache is replicated on two-third of the cluster nodes.
+  defp cache_replicas() do
+    nodes = [Node.self() | Node.list()]
+    nodes |> Enum.split(round((length(nodes) * 2) / 3)) |> elem(0)
   end
 end
