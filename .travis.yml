@@ -1,8 +1,8 @@
 dist: bionic
 language: elixir
-elixir: '1.8.2'
+elixir: '1.10.4'
 otp_release:
-  - '22.2'
+  - '22.3'
 script: make tests current_rmq_ref=$TRAVIS_BRANCH
 branches:
   only:
