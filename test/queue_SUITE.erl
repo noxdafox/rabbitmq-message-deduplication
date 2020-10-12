@@ -23,6 +23,7 @@ groups() ->
      {non_parallel_tests, [], [
                                deduplicate_message,
                                deduplicate_message_ttl,
+                               deduplicate_message_confirm,
                                message_acknowledged,
                                queue_overflow,
                                dead_letter
@@ -132,6 +133,24 @@ deduplicate_message_ttl(Config) ->
     publish_message(Channel, <<"test">>, "deduplicate-that", <<"500">>),
     timer:sleep(800),
     publish_message(Channel, <<"test">>, "deduplicate-that", <<"500">>),
+
+    {#'basic.get_ok'{}, _} = amqp_channel:call(Channel, Get).
+
+deduplicate_message_confirm(Config) ->
+    Get = #'basic.get'{queue = <<"test">>},
+    Channel = rabbit_ct_client_helpers:open_channel(Config),
+    #'confirm.select_ok'{} = amqp_channel:call(Channel, #'confirm.select'{}),
+
+    Args = [{<<"x-message-ttl">>, long, 1000}],
+    #'queue.declare_ok'{} = amqp_channel:call(Channel,
+                                              make_queue(<<"test">>, Args)),
+    bind_new_exchange(Channel, <<"test">>, <<"test">>),
+
+    %% Publish and wait for confirmation
+    publish_message(Channel, <<"test">>, "deduplicate-this"),
+    true = amqp_channel:wait_for_confirms(Channel, 3),
+    publish_message(Channel, <<"test">>, "deduplicate-this"),
+    false = amqp_channel:wait_for_confirms(Channel, 3),
 
     {#'basic.get_ok'{}, _} = amqp_channel:call(Channel, Get).
 
