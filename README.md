@@ -79,6 +79,16 @@ When declaring a queue, it is possible to enable message deduplication via the `
 
   * `x-deduplication-header`: messages will be deduplicated based on the content of this header. If the header is not provided, the message will not be checked against duplicates.
 
+## Disabling the Plugin
+
+It is possible to disable the plugin via the command:
+
+```bash
+    [sudo] rabbitmq-plugins enable rabbitmq_message_deduplication
+```
+
+All deduplication exchanges and queues will be rendered non functional. It is responsibility of the User to remove them.
+
 ## Running the tests
 
 ```bash
