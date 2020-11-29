@@ -26,6 +26,7 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.Mixfile do
 
     [
       applications: applications,
+      mod: {RabbitMQMessageDeduplication, []}
     ]
   end
 
@@ -48,6 +49,8 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.Mixfile do
 
   defp aliases do
     [
+      # Do not start the application during unit tests
+      test: "test --no-start",
       make_deps: [
         "deps.get",
         "deps.compile"
