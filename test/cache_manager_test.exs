@@ -5,13 +5,13 @@
 # Copyright (c) 2017-2019, Matteo Cafasso.
 # All rights reserved.
 
-defmodule RabbitMQ.MessageDeduplicationPlugin.CacheManager.Test do
+defmodule RabbitMQMessageDeduplication.CacheManager.Test do
   use ExUnit.Case
 
   alias :timer, as: Timer
   alias :mnesia, as: Mnesia
-  alias RabbitMQ.MessageDeduplicationPlugin.Cache, as: Cache
-  alias RabbitMQ.MessageDeduplicationPlugin.CacheManager, as: CacheManager
+  alias RabbitMQMessageDeduplication.Cache, as: Cache
+  alias RabbitMQMessageDeduplication.CacheManager, as: CacheManager
 
   @caches :message_deduplication_caches
 

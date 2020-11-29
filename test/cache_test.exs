@@ -5,12 +5,12 @@
 # Copyright (c) 2017-2019, Matteo Cafasso.
 # All rights reserved.
 
-defmodule RabbitMQ.MessageDeduplicationPlugin.Cache.Test do
+defmodule RabbitMQMessageDeduplication.Cache.Test do
   use ExUnit.Case
 
   alias :timer, as: Timer
   alias :mnesia, as: Mnesia
-  alias RabbitMQ.MessageDeduplicationPlugin.Cache, as: Cache
+  alias RabbitMQMessageDeduplication.Cache, as: Cache
 
   setup do
     cache = :test_cache
