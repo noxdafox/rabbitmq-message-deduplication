@@ -5,7 +5,7 @@
 # Copyright (c) 2017-2019, Matteo Cafasso.
 # All rights reserved.
 
-defmodule RabbitMQ.MessageDeduplicationPlugin.Cache do
+defmodule RabbitMQMessageDeduplication.Cache do
   @moduledoc """
   Simple cache implemented on top of Mnesia.
 

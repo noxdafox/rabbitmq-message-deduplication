@@ -5,35 +5,24 @@
 # Copyright (c) 2017-2019, Matteo Cafasso.
 # All rights reserved.
 
-defmodule RabbitMQ.MessageDeduplicationPlugin.CacheManager do
+defmodule RabbitMQMessageDeduplication.CacheManager do
   @moduledoc """
   The Cache Manager takes care of creating, maintaining and destroying caches.
   """
 
   use GenServer
 
-  require RabbitMQ.MessageDeduplicationPlugin.Cache
+  require RabbitMQMessageDeduplication.Cache
 
   alias :timer, as: Timer
   alias :mnesia, as: Mnesia
-  alias RabbitMQ.MessageDeduplicationPlugin.Cache, as: Cache
-
-  Module.register_attribute __MODULE__,
-    :rabbit_boot_step,
-    accumulate: true, persist: true
-
-  @rabbit_boot_step {
-    __MODULE__,
-    [description: "message deduplication plugin cache maintenance process",
-     mfa: {:rabbit_sup, :start_child, [__MODULE__]},
-     requires: :database,
-     enables: :external_infrastructure]}
+  alias RabbitMQMessageDeduplication.Cache, as: Cache
 
   @caches :message_deduplication_caches
   @cleanup_period Timer.seconds(3)
   @table_wait_time Timer.seconds(30)
 
-  def start_link do
+  def start_link() do
     GenServer.start_link(__MODULE__, %{}, name: __MODULE__)
   end
 
@@ -42,7 +31,11 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.CacheManager do
   """
   @spec create(atom, list) :: :ok | { :error, any }
   def create(cache, options) do
-    GenServer.call(__MODULE__, {:create, cache, options})
+    try do
+      GenServer.call(__MODULE__, {:create, cache, options})
+    catch
+      :exit, {:noproc, _} -> {:error, :noproc}
+    end
   end
 
   @doc """
@@ -50,7 +43,20 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.CacheManager do
   """
   @spec destroy(atom) :: :ok | { :error, any }
   def destroy(cache) do
-    GenServer.call(__MODULE__, {:destroy, cache})
+    try do
+      GenServer.call(__MODULE__, {:destroy, cache})
+    catch
+      :exit, {:noproc, _} -> {:error, :noproc}
+    end
+  end
+
+  @doc """
+  Disable the cache and terminate the manager process.
+  """
+  def disable() do
+    # GenServer.call(__MODULE__, {:disable})
+    :ok = Supervisor.terminate_child(:rabbit_sup, __MODULE__)
+    :ok = Supervisor.delete_child(:rabbit_sup, __MODULE__)
   end
 
   ## Server Callbacks

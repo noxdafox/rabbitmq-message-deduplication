@@ -5,7 +5,7 @@
 # Copyright (c) 2017-2018, Matteo Cafasso.
 # All rights reserved.
 
-defmodule RabbitMQ.MessageDeduplicationPlugin.Common do
+defmodule RabbitMQMessageDeduplication.Common do
   @moduledoc """
   Common functions shared between the exchange and the queue
   behaviour implementations.
@@ -14,10 +14,10 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.Common do
 
   import Record, only: [defrecord: 2, defrecord: 3, extract: 2]
 
-  require RabbitMQ.MessageDeduplicationPlugin.Cache
+  require RabbitMQMessageDeduplication.Cache
 
   alias :rabbit_binary_parser, as: RabbitBinaryParser
-  alias RabbitMQ.MessageDeduplicationPlugin.Cache, as: Cache
+  alias RabbitMQMessageDeduplication.Cache, as: Cache
 
   defrecord :content, extract(
     :content, from_lib: "rabbit_common/include/rabbit.hrl")
