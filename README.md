@@ -51,7 +51,7 @@ To create a message deduplication exchange, just declare it providing the type `
 
 Extra arguments:
 
-  * `x-cache-size`: maximum size for the deduplication cache. If the deduplication cache fills up, older entries will be removed to give space to new ones.
+  * `x-cache-size`: maximum number of entries for the deduplication cache. If the deduplication cache fills up, older entries will be removed to give space to new ones.
     This parameter is mandatory.
   * `x-cache-ttl`: amount of time in milliseconds duplicate headers are kept in cache.
     This parameter is optional.
