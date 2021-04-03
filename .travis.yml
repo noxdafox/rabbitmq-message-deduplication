@@ -1,8 +1,8 @@
-dist: bionic
+dist: focal
 language: elixir
 elixir: '1.10.4'
 otp_release:
-  - '23.0.4'
+  - '23.1.2'
 install:
   - wget https://github.com/rabbitmq/mix_task_archive_deps/releases/download/0.5.0/mix_task_archive_deps-0.5.0.ez
   - mix archive.install --force ./mix_task_archive_deps-0.5.0.ez
