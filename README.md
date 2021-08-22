@@ -45,6 +45,8 @@ The exchange type `x-message-deduplication` allows to filter message duplicates 
 
 Each message containing the `x-deduplication-header` header will not be routed if its value has been submitted previously. The amount of time a given message will be guaranteed to be unique can be controlled via the `x-cache-ttl` exchange argument or message header.
 
+> **_NOTE;_** This exchange acts like a [`fanout` exchange](https://www.rabbitmq.com/tutorials/amqp-concepts.html#exchange-fanout), so routing rules are not applied.
+
 ### Declare an exchange
 
 To create a message deduplication exchange, just declare it providing the type `x-message-deduplication`.
