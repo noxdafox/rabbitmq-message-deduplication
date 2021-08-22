@@ -18,6 +18,17 @@ defmodule RabbitMQMessageDeduplication.CacheManager do
   alias :mnesia, as: Mnesia
   alias RabbitMQMessageDeduplication.Cache, as: Cache
 
+  Module.register_attribute(__MODULE__,
+    :rabbit_boot_step,
+    accumulate: true, persist: true)
+
+  @rabbit_boot_step {
+    __MODULE__,
+    [description: "message deduplication plugin cache maintenance process",
+     mfa: {:rabbit_sup, :start_child, [__MODULE__]},
+     requires: :database,
+     enables: :external_infrastructure]}
+
   @caches :message_deduplication_caches
   @cleanup_period Timer.seconds(3)
   @table_wait_time Timer.seconds(30)

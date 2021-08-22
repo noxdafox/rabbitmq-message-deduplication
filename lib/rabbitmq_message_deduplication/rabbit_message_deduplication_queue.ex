@@ -29,14 +29,21 @@ defmodule RabbitMQMessageDeduplication.Queue do
 
   alias :amqqueue, as: AMQQueue
   alias :rabbit_log, as: RabbitLog
-  alias :supervisor2, as: Supervisor2
-  alias :rabbit_amqqueue, as: RabbitAMQQueue
-  alias :rabbit_amqqueue_sup_sup, as: RabbitAMQQueueSupervisor
   alias RabbitMQMessageDeduplication.Common, as: Common
   alias RabbitMQMessageDeduplication.Cache, as: Cache
   alias RabbitMQMessageDeduplication.CacheManager, as: CacheManager
 
   @behaviour :rabbit_backing_queue
+
+  Module.register_attribute(__MODULE__,
+    :rabbit_boot_step,
+    accumulate: true, persist: true)
+
+  @rabbit_boot_step {__MODULE__,
+                     [{:description, "message deduplication queue"},
+                      {:mfa, {__MODULE__, :enable, []}},
+                      {:requires, :database},
+                      {:enables, :external_infrastructure}]}
 
   defrecord :content, extract(
     :content, from_lib: "rabbit_common/include/rabbit.hrl")
@@ -126,27 +133,6 @@ defmodule RabbitMQMessageDeduplication.Queue do
         Application.put_env(:rabbit, :backing_queue_module, backing_queue)
       _ -> :ok
     end
-  end
-
-  @doc """
-  Restart deduplication queues.
-
-  When the broker starts, it initializes all queues before the Plugins.
-  Therefore, we need to restart all queues marked as deduplication
-  to ensure the correct implementation module is loaded.
-
-  The names of the restarted queues is returned.
-
-  """
-  @spec restart_queues() :: list
-  def restart_queues() do
-    RabbitLog.info(
-      "Restarting deduplication queues to load the correct module. " <>
-      "Ignore subsequent error messages.")
-
-    RabbitAMQQueue.list()
-    |> Enum.filter(fn(q) -> duplicate?(q) and local?(q) end)
-    |> Enum.map(fn(q) -> restart_queue_process(q) end)
   end
 
   @impl :rabbit_backing_queue
@@ -505,39 +491,6 @@ defmodule RabbitMQMessageDeduplication.Queue do
       false -> false
     end
   end
-
-  # Returns true if the queue is local to this node
-  defp local?(queue) do
-    node(AMQQueue.get_pid(queue)) == node()
-  end
-
-  # Restarts the AMQQueue associated process
-  defp restart_queue_process(queue) do
-    qpid = AMQQueue.get_pid(queue)
-    {:resource, vhost, :queue, name} = AMQQueue.get_name(queue)
-    supervisor = find_queue_supervisor(vhost, qpid)
-
-    RabbitLog.debug("Restarting deduplication queue ~s.~n", [name])
-
-    :ok = Supervisor2.terminate_child(supervisor, :rabbit_amqqueue)
-    {:ok, _} = Supervisor2.restart_child(supervisor, :rabbit_amqqueue)
-
-    name
-  end
-
-  defp find_queue_supervisor(vhost, qpid) do
-    {:ok, parent} = RabbitAMQQueueSupervisor.find_for_vhost(vhost)
-
-    Supervisor2.which_children(parent)
-    |> Enum.map(&child_pid/1)
-    |> Enum.map(fn(s) ->
-         {s, Supervisor2.which_children(s) |> Enum.map(&child_pid/1)}
-       end)
-    |> Enum.find_value(fn({s, c}) -> if Enum.member?(c, qpid), do: s end)
-  end
-
-  defp child_pid({:rabbit_amqqueue, pid, _, _}), do: pid
-  defp child_pid({_, pid, _, [:rabbit_amqqueue_sup]}), do: pid
 
   # Returns the expiration property of the given message
   defp message_expiration(message) do

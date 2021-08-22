@@ -9,25 +9,21 @@ defmodule RabbitMQMessageDeduplication do
 
   use Application
 
+  # Start a dummy supervisor to enable the Application behaviour.
+  # http://erlang.org/pipermail/erlang-questions/2010-April/050508.html
+  @impl true
   def start(_, _) do
-    children = [
-      %{
-        id: RabbitMQMessageDeduplication.CacheManager,
-        start: {RabbitMQMessageDeduplication.CacheManager, :start_link, []}
-      }
-    ]
-
-    supervisor = Supervisor.start_link(children, [strategy: :one_for_one])
-
-    RabbitMQMessageDeduplication.Exchange.register()
-    RabbitMQMessageDeduplication.Queue.enable()
-    RabbitMQMessageDeduplication.Queue.restart_queues()
-
-    supervisor
+    Supervisor.start_link(__MODULE__, [], [])
   end
 
+  @impl true
   def stop(_) do
     RabbitMQMessageDeduplication.Exchange.unregister()
     RabbitMQMessageDeduplication.Queue.disable()
+  end
+
+  @impl true
+  def init([]) do
+    Supervisor.init([], strategy: :one_for_one)
   end
 end

@@ -38,6 +38,16 @@ defmodule RabbitMQMessageDeduplication.Exchange do
 
   @behaviour :rabbit_exchange_type
 
+  Module.register_attribute(__MODULE__,
+    :rabbit_boot_step,
+    accumulate: true, persist: true)
+
+  @rabbit_boot_step {__MODULE__,
+                     [{:description, "exchange type x-message-deduplication"},
+                      {:mfa, {__MODULE__, :register, []}},
+                      {:requires, :rabbit_registry},
+                      {:enables, :kernel_ready}]}
+
   defrecord :exchange, extract(
     :exchange, from_lib: "rabbit_common/include/rabbit.hrl")
 
