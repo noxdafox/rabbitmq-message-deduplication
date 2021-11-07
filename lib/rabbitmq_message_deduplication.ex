@@ -22,7 +22,6 @@ defmodule RabbitMQMessageDeduplication do
     RabbitMQMessageDeduplication.Queue.disable()
   end
 
-  @impl true
   def init([]) do
     Supervisor.init([], strategy: :one_for_one)
   end
