@@ -10,8 +10,7 @@ Messages can be deduplicated when published into an exchange or enqueued to a qu
 
 Supported RabbitMQ versions:
 
- * \>= 3.7.17 use release marked `v3.8.x`
- * \<= 3.7.16 is not supported anymore. Check previous versions of this plugin.
+ * \<= 3.8.9 is not supported anymore. Check previous versions of this plugin.
 
 Download the `.ez` files from the chosen [release](https://github.com/noxdafox/rabbitmq-message-deduplication/releases) and copy them into the [RabbitMQ plugins directory](http://www.rabbitmq.com/relocate.html).
 
