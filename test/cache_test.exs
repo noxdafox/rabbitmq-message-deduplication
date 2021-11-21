@@ -27,9 +27,9 @@ defmodule RabbitMQMessageDeduplication.Cache.Test do
     cache_options = [size: 1, ttl: nil, persistence: :memory]
     cache_ttl_options = [size: 1, ttl: Timer.seconds(1), persistence: :memory]
 
-    :ok = Cache.create(cache, cache_options)
-    :ok = Cache.create(cache_ttl, cache_ttl_options)
-    :ok = Cache.create(cache_simple, cache_simple_options)
+    :ok = Cache.create(cache, true, cache_options)
+    :ok = Cache.create(cache_ttl, false, cache_ttl_options)
+    :ok = Cache.create(cache_simple, true, cache_simple_options)
 
     %{cache: cache, cache_ttl: cache_ttl, cache_simple: cache_simple}
   end
