@@ -1,6 +1,6 @@
 # RabbitMQ Message Deduplication Plugin
 
-[![Build Status](https://travis-ci.org/noxdafox/rabbitmq-message-deduplication.svg)](https://travis-ci.org/noxdafox/rabbitmq-message-deduplication)
+[![Build Status](https://github.com/noxdafox/rabbitmq-message-deduplication/actions/workflows/action.yml/badge.svg)](https://github.com/noxdafox/rabbitmq-message-deduplication/actions/workflows/action.yml)
 
 A plugin for filtering duplicate messages.
 
