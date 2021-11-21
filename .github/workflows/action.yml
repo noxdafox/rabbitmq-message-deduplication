@@ -1,0 +1,24 @@
+name: build
+on: [push, pull_request]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        erlang:
+          - 1:23.3.4.5-1
+          - 1:24.1.5-1
+    steps:
+      - uses: actions/checkout@v2
+      - name: Install Erlang
+        run: |
+          wget https://packages.erlang-solutions.com/erlang-solutions_2.0_all.deb
+          sudo dpkg -i erlang-solutions_2.0_all.deb
+          sudo apt update
+          sudo apt install -y --allow-downgrades esl-erlang=${{ matrix.erlang }}
+      - name: Install Elixir
+        run: |
+          sudo apt install -y elixir
+      - name: Run tests
+        run: |
+          make tests
