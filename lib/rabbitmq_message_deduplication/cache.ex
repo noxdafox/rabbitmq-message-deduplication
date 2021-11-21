@@ -25,12 +25,14 @@ defmodule RabbitMQMessageDeduplication.Cache do
 
   @doc """
   Create a new cache with the given name and options.
+
+  A distributed cache is replicated across multiple nodes.
   """
-  @spec create(atom, list) :: :ok | { :error, any }
-  def create(cache, options) do
+  @spec create(atom, boolean, list) :: :ok | { :error, any }
+  def create(cache, distributed, options) do
     Mnesia.start()
 
-    case cache_create(cache, options) do
+    case cache_create(cache, distributed, options) do
       {_, reason} -> {:error, reason}
       result -> result
     end
@@ -140,13 +142,13 @@ defmodule RabbitMQMessageDeduplication.Cache do
   ## Utility functions
 
   # Mnesia cache table creation.
-  defp cache_create(cache, options) do
+  defp cache_create(cache, distributed, options) do
     persistence = case Keyword.get(options, :persistence) do
                     :disk -> :disc_copies
                     :memory -> :ram_copies
                   end
     options = [{:attributes, [:entry, :expiration]},
-               {persistence, cache_replicas()},
+               {persistence, cache_replicas(distributed)},
                {:index, [:expiration]},
                {:user_properties, [{:limit, Keyword.get(options, :size)},
                                    {:default_ttl, Keyword.get(options, :ttl)}]}]
@@ -214,9 +216,15 @@ defmodule RabbitMQMessageDeduplication.Cache do
   end
 
   # List the nodes on which to create the cache replicas.
-  # Cache is replicated on two-third of the cluster nodes.
-  defp cache_replicas() do
+  # Distributed caches are replicated on two-third of the cluster nodes.
+  defp cache_replicas(_distributed = true) do
     nodes = [Node.self() | Node.list()]
     nodes |> Enum.split(round((length(nodes) * 2) / 3)) |> elem(0)
+  end
+
+  # List the nodes on which to create the cache replicas.
+  # Non distributed caches are local on the creation node.
+  defp cache_replicas(_distributed = false) do
+    [Node.self()]
   end
 end

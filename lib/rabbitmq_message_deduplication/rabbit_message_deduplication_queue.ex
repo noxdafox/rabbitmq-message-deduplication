@@ -160,7 +160,7 @@ defmodule RabbitMQMessageDeduplication.Queue do
         "Starting queue deduplication cache ~s with options ~p~n",
         [cache, options])
 
-      :ok = CacheManager.create(cache, options)
+      :ok = CacheManager.create(cache, false, options)
       :ok = Cache.flush(cache)
     end
 

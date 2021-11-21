@@ -161,7 +161,7 @@ defmodule RabbitMQMessageDeduplication.Exchange do
       "Starting exchange deduplication cache ~s with options ~p~n",
       [cache, options])
 
-    CacheManager.create(cache, options)
+    CacheManager.create(cache, true, options)
   end
 
   @impl :rabbit_exchange_type

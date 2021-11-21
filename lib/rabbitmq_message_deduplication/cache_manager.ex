@@ -40,12 +40,12 @@ defmodule RabbitMQMessageDeduplication.CacheManager do
   @doc """
   Create the cache and register it within the maintenance process.
   """
-  @spec create(atom, list) :: :ok | { :error, any }
-  def create(cache, options) do
+  @spec create(atom, boolean, list) :: :ok | { :error, any }
+  def create(cache, distributed, options) do
     try do
       timeout = @cache_wait_time + Timer.seconds(5)
 
-      GenServer.call(__MODULE__, {:create, cache, options}, timeout)
+      GenServer.call(__MODULE__, {:create, cache, distributed, options}, timeout)
     catch
       :exit, {:noproc, _} -> {:error, :noproc}
     end
@@ -103,10 +103,10 @@ defmodule RabbitMQMessageDeduplication.CacheManager do
   end
 
   # Create the cache and add it to the Mnesia caches table
-  def handle_call({:create, cache, options}, _from, state) do
+  def handle_call({:create, cache, distributed, options}, _from, state) do
     function = fn -> Mnesia.write({@caches, cache, :nil}) end
 
-    with :ok <- Cache.create(cache, options),
+    with :ok <- Cache.create(cache, distributed, options),
          {:atomic, result} <- Mnesia.transaction(function)
     do
       {:reply, result, state}
