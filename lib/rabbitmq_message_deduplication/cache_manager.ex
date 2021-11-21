@@ -30,8 +30,8 @@ defmodule RabbitMQMessageDeduplication.CacheManager do
      enables: :external_infrastructure]}
 
   @caches :message_deduplication_caches
-  @cleanup_period Timer.seconds(3)
-  @table_wait_time Timer.seconds(30)
+  @cache_wait_time Application.get_env(:rabbitmq_message_deduplication, :cache_wait_time)
+  @cleanup_period Application.get_env(:rabbitmq_message_deduplication, :cache_cleanup_period)
 
   def start_link() do
     GenServer.start_link(__MODULE__, %{}, name: __MODULE__)
@@ -43,7 +43,9 @@ defmodule RabbitMQMessageDeduplication.CacheManager do
   @spec create(atom, list) :: :ok | { :error, any }
   def create(cache, options) do
     try do
-      GenServer.call(__MODULE__, {:create, cache, options})
+      timeout = @cache_wait_time + Timer.seconds(5)
+
+      GenServer.call(__MODULE__, {:create, cache, options}, timeout)
     catch
       :exit, {:noproc, _} -> {:error, :noproc}
     end
@@ -90,7 +92,7 @@ defmodule RabbitMQMessageDeduplication.CacheManager do
 
     with :ok <- mnesia_create(Mnesia.create_table(@caches, [])),
          :ok <- mnesia_create(Mnesia.add_table_copy(@caches, node(), :ram_copies)),
-         :ok <- Mnesia.wait_for_tables([@caches], @table_wait_time)
+         :ok <- Mnesia.wait_for_tables([@caches], @cache_wait_time)
     do
       Process.send_after(__MODULE__, :cleanup, @cleanup_period)
       {:ok, state}

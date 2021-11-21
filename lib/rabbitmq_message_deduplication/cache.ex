@@ -18,11 +18,10 @@ defmodule RabbitMQMessageDeduplication.Cache do
   """
 
   alias :os, as: Os
-  alias :timer, as: Timer
   alias :erlang, as: Erlang
   alias :mnesia, as: Mnesia
 
-  @table_wait_time Timer.seconds(30)
+  @cache_wait_time Application.get_env(:rabbitmq_message_deduplication, :cache_wait_time)
 
   @doc """
   Create a new cache with the given name and options.
@@ -153,11 +152,17 @@ defmodule RabbitMQMessageDeduplication.Cache do
                                    {:default_ttl, Keyword.get(options, :ttl)}]}]
 
     case Mnesia.create_table(cache, options) do
-      {:atomic, :ok} ->
-        Mnesia.wait_for_tables([cache], @table_wait_time)
-      {:aborted, {:already_exists, _}} ->
-        Mnesia.wait_for_tables([cache], @table_wait_time)
+      {:atomic, :ok} -> wait_for_cache(cache)
+      {:aborted, {:already_exists, _}} -> wait_for_cache(cache)
       error -> error
+    end
+  end
+
+  # Wait for the table to be loaded and force it in case of timeout
+  defp wait_for_cache(cache) do
+    case Mnesia.wait_for_tables([cache], @cache_wait_time) do
+      {:timeout, [cache]} -> Mnesia.force_load_table(cache)
+      result -> result
     end
   end
 
