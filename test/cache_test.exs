@@ -99,14 +99,14 @@ defmodule RabbitMQMessageDeduplication.Cache.Test do
       %{cache: cache, cache_ttl: _, cache_simple: _} do
     {:ok, :inserted} = Cache.insert(cache, "foo")
 
-    [size: 1, bytes: _, entries: 1] = Cache.info(cache)
+    [entries: 1, bytes: _, size: 1] = Cache.info(cache)
   end
 
   test "simple cache information",
       %{cache: _, cache_ttl: _, cache_simple: cache_simple} do
     {:ok, :inserted} = Cache.insert(cache_simple, "foo")
 
-    [bytes: _, entries: 1] = Cache.info(cache_simple)
+    [entries: 1, bytes: _] = Cache.info(cache_simple)
   end
 
   test "flush the cache", %{cache: cache, cache_ttl: _, cache_simple: _} do
