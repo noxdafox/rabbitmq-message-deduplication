@@ -219,10 +219,15 @@ defmodule RabbitMQMessageDeduplication.Cache do
   end
 
   # List the nodes on which to create the cache replicas.
-  # Distributed caches are replicated on two-third of the cluster nodes.
+  # Distributed caches are replicated on two-thirds of the cluster nodes.
   defp cache_replicas(_distributed = true) do
     nodes = [Node.self() | Node.list()]
-    nodes |> Enum.split(round((length(nodes) * 2) / 3)) |> elem(0)
+
+    if length(nodes) > 2 do
+      nodes |> Enum.split(floor((length(nodes) * 2) / 3)) |> elem(0)
+    else
+      nodes
+    end
   end
 
   # List the nodes on which to create the cache replicas.
