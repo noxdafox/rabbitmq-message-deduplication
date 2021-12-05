@@ -128,14 +128,17 @@ defmodule RabbitMQMessageDeduplication.Cache do
   """
   @spec info(atom) :: list
   def info(cache) do
-    info = [
-      bytes: Mnesia.table_info(cache, :memory) * Erlang.system_info(:wordsize),
-      entries: Mnesia.table_info(cache, :size)
-    ]
+    with entries when is_integer(entries) <- Mnesia.table_info(cache, :size),
+         words when is_integer(words) <- Mnesia.table_info(cache, :memory)
+    do
+      bytes = words * Erlang.system_info(:wordsize)
 
-    case cache_property(cache, :limit) do
-      number when is_integer(number) -> [size: number] ++ info
-      nil -> info
+      case cache_property(cache, :limit) do
+        nil -> [entries: entries, bytes: bytes]
+        size -> [entries: entries, bytes: bytes, size: size]
+      end
+    else
+      :undefined -> []
     end
   end
 
