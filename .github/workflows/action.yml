@@ -19,6 +19,11 @@ jobs:
       - name: Install Elixir
         run: |
           sudo apt install -y elixir=1.12.2-1
+      - name: Install RMQ requirements
+        run: |
+          wget https://github.com/rabbitmq/mix_task_archive_deps/releases/download/0.5.0/mix_task_archive_deps-0.5.0.ez
+          mix archive.install --force ./mix_task_archive_deps-0.5.0.ez
+          rm mix_task_archive_deps-0.5.0.ez
       - name: Run tests
         run: |
           make tests
