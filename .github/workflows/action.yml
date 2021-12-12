@@ -15,7 +15,9 @@ jobs:
           wget https://packages.erlang-solutions.com/erlang-solutions_2.0_all.deb
           sudo dpkg -i erlang-solutions_2.0_all.deb
           sudo apt update
-          sudo apt install -y --allow-downgrades esl-erlang=${{ matrix.erlang }}
+          sudo apt install -y --allow-downgrades \
+            esl-erlang=${{ matrix.erlang }}      \
+            erlang-tools=${{ matrix.erlang }}
       - name: Install Elixir
         run: |
           sudo apt install -y elixir
