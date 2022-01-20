@@ -468,14 +468,14 @@ defmodule RabbitMQMessageDeduplication.Queue do
     dqstate(queue_state: qs) = state
     acks = Enum.map(acks, fn(dqack(tag: ack_tag)) -> ack_tag end)
 
-    passthrough do: info(delivered_publish, acks, acc, qs)
+    passthrough do: zip_msgs_and_acks(delivered_publish, acks, acc, qs)
   end
 
   @impl :rabbit_backing_queue
   def zip_msgs_and_acks(delivered_publish, acks, acc, state) do
     dqstate(queue_state: qs) = state
 
-    passthrough do: info(delivered_publish, acks, acc, qs)
+    passthrough do: zip_msgs_and_acks(delivered_publish, acks, acc, qs)
   end
 
   @impl :rabbit_backing_queue
