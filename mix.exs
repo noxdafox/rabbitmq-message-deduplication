@@ -9,7 +9,7 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.Mixfile do
 
     [
       app: :rabbitmq_message_deduplication,
-      version: "0.5.2",
+      version: "0.5.3",
       build_embedded: Mix.env == :prod,
       start_permanent: Mix.env == :prod,
       deps_path: deps_dir,
