@@ -142,6 +142,26 @@ defmodule RabbitMQMessageDeduplication.Cache do
     end
   end
 
+  @doc """
+  Exchange cache table should be distributed if possible
+  """
+  @spec ensure_distributed(atom, list) :: list
+  def ensure_distributed(cache, args) do
+    current_nodes = Mnesia.table_info(cache, :all_nodes)
+    distribute_nodes = cache_replicas(true)
+    nodes = distribute_nodes -- current_nodes
+    persistence = case Keyword.get(args, :persistence) do
+                :disk -> :disc_copies
+                :memory -> :ram_copies
+              end
+    if nodes >= 1 do
+      for node <- nodes do
+          add_table_copy(cache, node, persistence)
+      end
+    end
+  end
+
+
   ## Utility functions
 
   # Mnesia cache table creation.
@@ -234,5 +254,9 @@ defmodule RabbitMQMessageDeduplication.Cache do
   # Non distributed caches are local on the creation node.
   defp cache_replicas(_distributed = false) do
     [Node.self()]
+  end
+
+  defp add_table_copy(tab, node, storage) do
+    Mnesia.add_table_copy(tab, node, storage)
   end
 end
