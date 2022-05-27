@@ -71,10 +71,10 @@ defmodule RabbitMQMessageDeduplication.Common do
 
   If not, it adds it to the cache with the corresponding name.
   """
-  @spec duplicate?(tuple, basic_message, integer | nil, list | []) :: boolean
-  def duplicate?(name, message, ttl \\ nil, args \\ []) do
+  @spec duplicate?(tuple, basic_message, integer | nil) :: boolean
+  def duplicate?(name, message, ttl \\ nil) do
     cache = cache_name(name)
-    Cache.ensure_distributed(cache, args)
+
     case message_header(message, "x-deduplication-header") do
       key when not is_nil(key) -> case Cache.insert(cache, key, ttl) do
                                     {:ok, :exists} -> true

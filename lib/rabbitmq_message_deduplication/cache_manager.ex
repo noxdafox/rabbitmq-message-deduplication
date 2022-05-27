@@ -100,6 +100,7 @@ defmodule RabbitMQMessageDeduplication.CacheManager do
       {:timeout, reason} -> {:error, reason}
       error -> error
     end
+    :net_kernel.monitor_nodes(true)
   end
 
   # Create the cache and add it to the Mnesia caches table
@@ -136,6 +137,12 @@ defmodule RabbitMQMessageDeduplication.CacheManager do
     Enum.each(caches, &Cache.delete_expired_entries/1)
     Process.send_after(__MODULE__, :cleanup, @cleanup_period)
 
+    {:noreply, state}
+  end
+
+  # On node addition distribute cache tables
+  def handle_info({:nodeup, node}, state) do
+    Cache.ensure_distributed()
     {:noreply, state}
   end
 end

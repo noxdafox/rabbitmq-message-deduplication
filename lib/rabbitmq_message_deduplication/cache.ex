@@ -21,6 +21,7 @@ defmodule RabbitMQMessageDeduplication.Cache do
   alias :erlang, as: Erlang
   alias :mnesia, as: Mnesia
 
+  @caches :message_deduplication_caches
   @cache_wait_time Application.get_env(:rabbitmq_message_deduplication, :cache_wait_time)
 
   @doc """
@@ -142,23 +143,17 @@ defmodule RabbitMQMessageDeduplication.Cache do
     end
   end
 
+  def list_caches() do
+      Mnesia.foldl(fn(rec, acc) -> [rec | acc] end, [], @caches)
+  end
+
   @doc """
-  Exchange cache table should be distributed if possible
+  All cache tables should be distributed if possible
   """
-  @spec ensure_distributed(atom, list) :: list
-  def ensure_distributed(cache, args) do
-    current_nodes = Mnesia.table_info(cache, :all_nodes)
-    distribute_nodes = cache_replicas(true)
-    nodes = distribute_nodes -- current_nodes
-    persistence = case Keyword.get(args, :persistence) do
-                :disk -> :disc_copies
-                :memory -> :ram_copies
-              end
-    if nodes >= 1 do
-      for node <- nodes do
-          add_table_copy(cache, node, persistence)
-      end
-    end
+  @spec ensure_distributed()
+  def ensure_distributed() do
+    cache_tables = list_caches()
+    Enum.each(cache_tables, _ensure_distributed)
   end
 
 
@@ -247,6 +242,18 @@ defmodule RabbitMQMessageDeduplication.Cache do
       nodes |> Enum.split(floor((length(nodes) * 2) / 3)) |> elem(0)
     else
       nodes
+    end
+  end
+
+  defp _ensure_distributed(cache) do
+    current_nodes = Mnesia.table_info(cache, :all_nodes)
+    distribute_nodes = cache_replicas(true)
+    nodes = distribute_nodes -- current_nodes
+    persistence = Mnesia.table_info(cache, :storage_type)
+    if nodes >= 1 do
+      for node <- nodes do
+          add_table_copy(cache, node, persistence)
+      end
     end
   end
 

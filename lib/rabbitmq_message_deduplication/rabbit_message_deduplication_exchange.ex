@@ -87,9 +87,8 @@ defmodule RabbitMQMessageDeduplication.Exchange do
   end
 
   @impl :rabbit_exchange_type
-  def route(exchange(name: name, arguments: args), delivery(message: msg = basic_message())) do
-    options = format_options(args)
-    if route?(name, msg, options) do
+  def route(exchange(name: name), delivery(message: msg = basic_message())) do
+    if route?(name, msg) do
       RabbitRouter.match_routing_key(name, [:_])
     else
       []
@@ -213,9 +212,9 @@ defmodule RabbitMQMessageDeduplication.Exchange do
   # Utility functions
 
   # Whether to route the message or not.
-  defp route?(exchange_name, message, args) do
+  defp route?(exchange_name, message) do
     ttl = Common.message_header(message, "x-cache-ttl")
-    not Common.duplicate?(exchange_name, message, ttl, args)
+    not Common.duplicate?(exchange_name, message, ttl)
   end
 
 defp format_options(args) do
