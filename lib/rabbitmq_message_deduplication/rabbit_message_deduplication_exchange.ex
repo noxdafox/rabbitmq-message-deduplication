@@ -217,13 +217,12 @@ defmodule RabbitMQMessageDeduplication.Exchange do
     not Common.duplicate?(exchange_name, message, ttl)
   end
 
-defp format_options(args) do
-    options = [size: Common.rabbit_argument(
-                 args, "x-cache-size", type: :number),
-               ttl: Common.rabbit_argument(
-                 args, "x-cache-ttl", type: :number),
-               persistence: Common.rabbit_argument(
-                 args, "x-cache-persistence", type: :atom, default: "memory")]
-    options
-    end
+  defp format_options(args) do
+    [size: Common.rabbit_argument(
+        args, "x-cache-size", type: :number),
+     ttl: Common.rabbit_argument(
+       args, "x-cache-ttl", type: :number),
+     persistence: Common.rabbit_argument(
+       args, "x-cache-persistence", type: :atom, default: "memory")]
+  end
 end

@@ -16,7 +16,7 @@ defmodule RabbitMQMessageDeduplication.Cache do
   A FIFO approach would be preferrable but impractical by now due to Mnesia limitations.
 
   """
-
+  require Logger
   alias :os, as: Os
   alias :erlang, as: Erlang
   alias :mnesia, as: Mnesia
@@ -150,12 +150,14 @@ defmodule RabbitMQMessageDeduplication.Cache do
   @doc """
   All cache tables should be distributed if possible
   """
-  @spec ensure_distributed()
   def ensure_distributed() do
-    cache_tables = list_caches()
-    Enum.each(cache_tables, _ensure_distributed)
+    case Mnesia.transaction(
+           fn -> Mnesia.foldl(fn(cache, _acc) -> maybe_replicate(cache) end, [], @caches) end) do
+      {:atomic, :ok} -> :ok
+      {:aborted, reason} -> {:error, reason}
+      _ -> :ok
+    end
   end
-
 
   ## Utility functions
 
@@ -245,17 +247,25 @@ defmodule RabbitMQMessageDeduplication.Cache do
     end
   end
 
-  defp _ensure_distributed(cache) do
+  defp maybe_replicate(cache) do
     current_nodes = Mnesia.table_info(cache, :all_nodes)
+    Looger.info("current nodes")
+    Looger.info(IO.inspects(current_nodes))
     distribute_nodes = cache_replicas(true)
     nodes = distribute_nodes -- current_nodes
+    Looger.info("nodes")
+    Looger.info(IO.inspects(nodes))
     persistence = Mnesia.table_info(cache, :storage_type)
-    if nodes >= 1 do
-      for node <- nodes do
-          add_table_copy(cache, node, persistence)
+    Looger.info("persistence")
+    Looger.info(IO.inspects(persistence))
+    for node <- nodes do
+       response = Mnesia.transaction(fn -> Mnesia.add_table_copy(cache, node, persistence) end)
+       Looger.info("response")
+       Looger.info(response)
+       response
       end
-    end
   end
+
 
   # List the nodes on which to create the cache replicas.
   # Non distributed caches are local on the creation node.
@@ -263,7 +273,4 @@ defmodule RabbitMQMessageDeduplication.Cache do
     [Node.self()]
   end
 
-  defp add_table_copy(tab, node, storage) do
-    Mnesia.add_table_copy(tab, node, storage)
-  end
 end
