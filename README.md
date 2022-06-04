@@ -85,7 +85,7 @@ When declaring a queue, it is possible to enable message deduplication via the `
 It is possible to disable the plugin via the command:
 
 ```bash
-    [sudo] rabbitmq-plugins enable rabbitmq_message_deduplication
+    [sudo] rabbitmq-plugins disable rabbitmq_message_deduplication
 ```
 
 All deduplication exchanges and queues will be rendered non functional. It is responsibility of the User to remove them.
