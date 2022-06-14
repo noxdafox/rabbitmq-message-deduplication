@@ -42,8 +42,8 @@ defmodule RabbitMQMessageDeduplication.Queue do
   @rabbit_boot_step {__MODULE__,
                      [{:description, "message deduplication queue"},
                       {:mfa, {__MODULE__, :enable, []}},
-                      {:requires, :database},
-                      {:enables, :external_infrastructure}]}
+                      {:requires, :kernel_ready},
+                      {:enables, :core_initialized}]}
 
   defrecord :content, extract(
     :content, from_lib: "rabbit_common/include/rabbit.hrl")
