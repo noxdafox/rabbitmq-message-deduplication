@@ -16,6 +16,7 @@ defmodule RabbitMQMessageDeduplication.CacheManager do
 
   alias :timer, as: Timer
   alias :mnesia, as: Mnesia
+  alias :net_kernel, as: NetKernel
   alias RabbitMQMessageDeduplication.Cache, as: Cache
 
   Module.register_attribute(__MODULE__,
@@ -92,7 +93,8 @@ defmodule RabbitMQMessageDeduplication.CacheManager do
 
     with :ok <- mnesia_create(Mnesia.create_table(@caches, [])),
          :ok <- mnesia_create(Mnesia.add_table_copy(@caches, node(), :ram_copies)),
-         :ok <- Mnesia.wait_for_tables([@caches], @cache_wait_time)
+         :ok <- Mnesia.wait_for_tables([@caches], @cache_wait_time),
+         :ok <- NetKernel.monitor_nodes(true)
     do
       Process.send_after(__MODULE__, :cleanup, @cleanup_period)
       {:ok, state}
@@ -138,4 +140,15 @@ defmodule RabbitMQMessageDeduplication.CacheManager do
 
     {:noreply, state}
   end
+
+  # On node addition distribute cache tables
+  def handle_info({:nodeup, node}, state) do
+      Cache.ensure_distributed()
+      {:noreply, state}
+    end
+
+  # On node down ignore
+  def handle_info({:nodedown, node}, state) do
+      {:noreply, state}
+    end
 end

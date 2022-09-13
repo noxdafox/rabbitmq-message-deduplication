@@ -150,12 +150,7 @@ defmodule RabbitMQMessageDeduplication.Exchange do
   @impl :rabbit_exchange_type
   def create(:transaction, exchange(name: name, arguments: args)) do
     cache = Common.cache_name(name)
-    options = [size: Common.rabbit_argument(
-                 args, "x-cache-size", type: :number),
-               ttl: Common.rabbit_argument(
-                 args, "x-cache-ttl", type: :number),
-               persistence: Common.rabbit_argument(
-                 args, "x-cache-persistence", type: :atom, default: "memory")]
+    options = format_options(args)
 
     RabbitLog.debug(
       "Starting exchange deduplication cache ~s with options ~p~n",
@@ -220,5 +215,14 @@ defmodule RabbitMQMessageDeduplication.Exchange do
   defp route?(exchange_name, message) do
     ttl = Common.message_header(message, "x-cache-ttl")
     not Common.duplicate?(exchange_name, message, ttl)
+  end
+
+  defp format_options(args) do
+    [size: Common.rabbit_argument(
+        args, "x-cache-size", type: :number),
+     ttl: Common.rabbit_argument(
+       args, "x-cache-ttl", type: :number),
+     persistence: Common.rabbit_argument(
+       args, "x-cache-persistence", type: :atom, default: "memory")]
   end
 end
