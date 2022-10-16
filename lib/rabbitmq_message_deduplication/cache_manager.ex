@@ -142,13 +142,10 @@ defmodule RabbitMQMessageDeduplication.CacheManager do
   end
 
   # On node addition distribute cache tables
-  def handle_info({:nodeup, node}, state) do
-      Cache.ensure_distributed()
-      {:noreply, state}
-    end
+  def handle_info({:nodeup, _node}, state) do
+    {:atomic, caches} = Mnesia.transaction(fn -> Mnesia.all_keys(@caches) end)
+    Enum.each(caches, &Cache.rebalance_replicas/1)
 
-  # On node down ignore
-  def handle_info({:nodedown, node}, state) do
-      {:noreply, state}
-    end
+    {:noreply, state}
+  end
 end

@@ -16,7 +16,6 @@ defmodule RabbitMQMessageDeduplication.Cache do
   A FIFO approach would be preferrable but impractical by now due to Mnesia limitations.
 
   """
-  require Logger
   alias :os, as: Os
   alias :erlang, as: Erlang
   alias :mnesia, as: Mnesia
@@ -143,19 +142,12 @@ defmodule RabbitMQMessageDeduplication.Cache do
     end
   end
 
-  def list_caches() do
-      Mnesia.foldl(fn(rec, acc) -> [rec | acc] end, [], @caches)
-  end
-
   @doc """
-  All cache tables should be distributed if possible
+  Rebalance cache replicas.
   """
-  def ensure_distributed() do
-    case Mnesia.transaction(
-           fn -> Mnesia.foldl(fn(cache, _acc) -> maybe_replicate(cache) end, [], @caches) end) do
-      {:atomic, :ok} -> :ok
-      {:aborted, reason} -> {:error, reason}
-      _ -> :ok
+  def rebalance_replicas(cache) do
+    if cache_property(cache, :distributed) do
+      cache_rebalance(cache)
     end
   end
 
@@ -167,10 +159,13 @@ defmodule RabbitMQMessageDeduplication.Cache do
                     :disk -> :disc_copies
                     :memory -> :ram_copies
                   end
+    replicas = if distributed, do: cache_replicas(), else: [Node.self()]
     options = [{:attributes, [:entry, :expiration]},
-               {persistence, cache_replicas(distributed)},
+               {persistence, replicas},
                {:index, [:expiration]},
-               {:user_properties, [{:limit, Keyword.get(options, :size)},
+               {:user_properties, [{:distributed, distributed},
+                                   {:persistence, persistence},
+                                   {:limit, Keyword.get(options, :size)},
                                    {:default_ttl, Keyword.get(options, :ttl)}]}]
 
     case Mnesia.create_table(cache, options) do
@@ -235,42 +230,23 @@ defmodule RabbitMQMessageDeduplication.Cache do
     entry
   end
 
-  # List the nodes on which to create the cache replicas.
-  # Distributed caches are replicated on two-thirds of the cluster nodes.
-  defp cache_replicas(_distributed = true) do
-    nodes = Mnesia.system_info(:db_nodes)
+  # Rebalance a distributed cache across the cluster nodes
+  def cache_rebalance(cache) do
+    cache_nodes = Mnesia.table_info(cache, cache_property(cache, :persistence))
 
-    if length(nodes) > 2 do
-      nodes |> Enum.split(floor((length(nodes) * 2) / 3)) |> elem(0)
-    else
-      nodes
+    for node <- cache_replicas(cache_nodes) do
+      {:atomic, :ok} = Mnesia.transaction(fn ->
+        Mnesia.add_table_copy(cache, node, cache_property(cache, :persistence))
+      end)
     end
   end
 
-  defp maybe_replicate(cache) do
-    current_nodes = Mnesia.table_info(cache, :all_nodes)
-    Looger.info("current nodes")
-    Looger.info(IO.inspects(current_nodes))
-    distribute_nodes = cache_replicas(true)
-    nodes = distribute_nodes -- current_nodes
-    Looger.info("nodes")
-    Looger.info(IO.inspects(nodes))
-    persistence = Mnesia.table_info(cache, :storage_type)
-    Looger.info("persistence")
-    Looger.info(IO.inspects(persistence))
-    for node <- nodes do
-       response = Mnesia.transaction(fn -> Mnesia.add_table_copy(cache, node, persistence) end)
-       Looger.info("response")
-       Looger.info(response)
-       response
-      end
-  end
-
-
   # List the nodes on which to create the cache replicas.
-  # Non distributed caches are local on the creation node.
-  defp cache_replicas(_distributed = false) do
-    [Node.self()]
-  end
+  # Distributed caches are replicated on two-thirds of the cluster nodes.
+  defp cache_replicas(cache_nodes \\ []) do
+    cluster_nodes = Mnesia.system_info(:db_nodes)
+    replica_number = floor((length(cluster_nodes) * 2) / 3)
 
+    Enum.take(cache_nodes ++ (cluster_nodes -- cache_nodes), replica_number)
+  end
 end
