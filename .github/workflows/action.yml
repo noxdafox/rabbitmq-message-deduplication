@@ -18,7 +18,7 @@ jobs:
           sudo apt install -y --allow-downgrades esl-erlang=${{ matrix.erlang }}
       - name: Install Elixir
         run: |
-          sudo apt install -y elixir=1.12.2-1
+          sudo apt install -y elixir=1.13.4-1
       - name: Install RMQ requirements
         run: |
           wget https://github.com/rabbitmq/mix_task_archive_deps/releases/download/0.5.0/mix_task_archive_deps-0.5.0.ez
