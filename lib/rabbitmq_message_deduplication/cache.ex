@@ -132,10 +132,11 @@ defmodule RabbitMQMessageDeduplication.Cache do
          words when is_integer(words) <- Mnesia.table_info(cache, :memory)
     do
       bytes = words * Erlang.system_info(:wordsize)
+      nodes = Mnesia.table_info(cache, cache_property(cache, :persistence))
 
       case cache_property(cache, :limit) do
-        nil -> [entries: entries, bytes: bytes]
-        size -> [entries: entries, bytes: bytes, size: size]
+        nil -> [entries: entries, bytes: bytes, nodes: nodes]
+        size -> [entries: entries, bytes: bytes, nodes: nodes, size: size]
       end
     else
       :undefined -> []
@@ -231,7 +232,7 @@ defmodule RabbitMQMessageDeduplication.Cache do
   end
 
   # Rebalance a distributed cache across the cluster nodes
-  def cache_rebalance(cache) do
+  defp cache_rebalance(cache) do
     cache_nodes = Mnesia.table_info(cache, cache_property(cache, :persistence))
 
     for node <- cache_replicas(cache_nodes) do
