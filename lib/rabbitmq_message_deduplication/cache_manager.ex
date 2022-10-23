@@ -67,7 +67,7 @@ defmodule RabbitMQMessageDeduplication.CacheManager do
   Disable the cache and terminate the manager process.
   """
   def disable() do
-    :ok = Mnesia.unsubscribe(:system)
+    {:ok, _node} = Mnesia.unsubscribe(:system)
     :ok = Supervisor.terminate_child(:rabbit_sup, __MODULE__)
     :ok = Supervisor.delete_child(:rabbit_sup, __MODULE__)
   end
@@ -93,7 +93,7 @@ defmodule RabbitMQMessageDeduplication.CacheManager do
     with :ok <- mnesia_create(Mnesia.create_table(@caches, [])),
          :ok <- mnesia_create(Mnesia.add_table_copy(@caches, node(), :ram_copies)),
          :ok <- Mnesia.wait_for_tables([@caches], @cache_wait_time),
-         :ok <- Mnesia.subscribe(:system)
+         {:ok, _node} <- Mnesia.subscribe(:system)
     do
       Process.send_after(__MODULE__, :cleanup, @cleanup_period)
       {:ok, state}
