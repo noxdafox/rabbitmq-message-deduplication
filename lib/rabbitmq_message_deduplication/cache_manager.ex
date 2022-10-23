@@ -16,7 +16,6 @@ defmodule RabbitMQMessageDeduplication.CacheManager do
 
   alias :timer, as: Timer
   alias :mnesia, as: Mnesia
-  alias :net_kernel, as: NetKernel
   alias RabbitMQMessageDeduplication.Cache, as: Cache
 
   Module.register_attribute(__MODULE__,
@@ -68,7 +67,7 @@ defmodule RabbitMQMessageDeduplication.CacheManager do
   Disable the cache and terminate the manager process.
   """
   def disable() do
-    # GenServer.call(__MODULE__, {:disable})
+    :ok = Mnesia.unsubscribe(:system)
     :ok = Supervisor.terminate_child(:rabbit_sup, __MODULE__)
     :ok = Supervisor.delete_child(:rabbit_sup, __MODULE__)
   end
@@ -94,7 +93,7 @@ defmodule RabbitMQMessageDeduplication.CacheManager do
     with :ok <- mnesia_create(Mnesia.create_table(@caches, [])),
          :ok <- mnesia_create(Mnesia.add_table_copy(@caches, node(), :ram_copies)),
          :ok <- Mnesia.wait_for_tables([@caches], @cache_wait_time),
-         :ok <- NetKernel.monitor_nodes(true)
+         :ok <- Mnesia.subscribe(:system)
     do
       Process.send_after(__MODULE__, :cleanup, @cleanup_period)
       {:ok, state}
@@ -142,10 +141,14 @@ defmodule RabbitMQMessageDeduplication.CacheManager do
   end
 
   # On node addition distribute cache tables
-  def handle_info({:nodeup, _node}, state) do
+  def handle_info({:mnesia_system_event, {:mnesia_up, _node}}, state) do
     {:atomic, caches} = Mnesia.transaction(fn -> Mnesia.all_keys(@caches) end)
     Enum.each(caches, &Cache.rebalance_replicas/1)
 
+    {:noreply, state}
+  end
+
+  def handle_info({:mnesia_system_event, _event}, state) do
     {:noreply, state}
   end
 end

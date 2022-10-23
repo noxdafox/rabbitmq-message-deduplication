@@ -20,7 +20,6 @@ defmodule RabbitMQMessageDeduplication.Cache do
   alias :erlang, as: Erlang
   alias :mnesia, as: Mnesia
 
-  @caches :message_deduplication_caches
   @cache_wait_time Application.get_env(:rabbitmq_message_deduplication, :cache_wait_time)
 
   @doc """
@@ -171,7 +170,7 @@ defmodule RabbitMQMessageDeduplication.Cache do
 
     case Mnesia.create_table(cache, options) do
       {:atomic, :ok} -> wait_for_cache(cache)
-      {:aborted, {:already_exists, _}} -> wait_for_cache(cache)
+      {:aborted, {:already_exists, ^cache, _}} -> wait_for_cache(cache)
       error -> error
     end
   end
@@ -233,19 +232,21 @@ defmodule RabbitMQMessageDeduplication.Cache do
 
   # Rebalance a distributed cache across the cluster nodes
   defp cache_rebalance(cache) do
+    storage_type = cache_property(cache, :persistence)
     cache_nodes = Mnesia.table_info(cache, cache_property(cache, :persistence))
 
     for node <- cache_replicas(cache_nodes) do
-      {:atomic, :ok} = Mnesia.transaction(fn ->
-        Mnesia.add_table_copy(cache, node, cache_property(cache, :persistence))
-      end)
+      case Mnesia.add_table_copy(cache, node, storage_type) do
+        {:atomic, :ok} -> wait_for_cache(cache)
+        {:aborted, {:already_exists, ^cache, _}} -> wait_for_cache(cache)
+      end
     end
   end
 
   # List the nodes on which to create the cache replicas.
   # Distributed caches are replicated on two-thirds of the cluster nodes.
   defp cache_replicas(cache_nodes \\ []) do
-    cluster_nodes = Mnesia.system_info(:db_nodes)
+    cluster_nodes = Mnesia.system_info(:running_db_nodes)
     replica_number = floor((length(cluster_nodes) * 2) / 3)
 
     Enum.take(cache_nodes ++ (cluster_nodes -- cache_nodes), replica_number)
