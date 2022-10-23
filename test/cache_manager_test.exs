@@ -51,8 +51,8 @@ defmodule RabbitMQMessageDeduplication.CacheManager.Test do
     Timer.sleep(3200)
 
     {:atomic, []} = Mnesia.transaction(fn -> Mnesia.all_keys(:cache) end)
+    {:ok, :inserted} = Cache.insert(:cache, "foo")
 
     :ok = CacheManager.destroy(:cache)
   end
-
 end
