@@ -14,7 +14,21 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.Mixfile do
       start_permanent: Mix.env == :prod,
       deps_path: deps_dir,
       deps: deps(deps_dir),
-      aliases: aliases()
+      aliases: aliases(),
+      xref: [
+        exclude: [
+          :amqqueue,
+          :rabbit_backing_queue,
+          :rabbit_exchange,
+          :rabbit_router,
+          :rabbit_binary_parser,
+          :rabbit_exchange_type,
+          :rabbit_log,
+          :rabbit_misc,
+          :rabbit_policy_validator,
+          :rabbit_registry
+        ]
+      ]
     ]
   end
 
