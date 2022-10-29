@@ -32,9 +32,9 @@ defmodule RabbitMQMessageDeduplication.Common do
   @default_arguments %{type: nil, default: nil}
 
   @doc """
-  Retrieve a configuration value from a list of exchange or queue arguments.
+  Retrieve a configuration value from a list of arguments or policies.
   """
-  @spec rabbit_argument(list, String.t, List.t) :: String.t | nil
+  @spec rabbit_argument(List.t, String.t, List.t) :: String.t | nil
   def rabbit_argument(arguments, argument, opts \\ []) do
     %{type: type, default: default} = Enum.into(opts, @default_arguments)
 
@@ -103,9 +103,10 @@ defmodule RabbitMQMessageDeduplication.Common do
     String.to_atom("cache_queue_#{resource}_#{queue}")
   end
 
-  defp rabbit_keyfind(list, key, default \\ nil) do
+  def rabbit_keyfind(list, key, default \\ nil) do
     case List.keyfind(list, key, 0) do
       {_key, _type, value} -> value
+      {_key, value} -> value
       _ -> default
     end
   end
