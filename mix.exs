@@ -18,6 +18,7 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.Mixfile do
       xref: [
         exclude: [
           :amqqueue,
+          :rabbit_amqqueue,
           :rabbit_backing_queue,
           :rabbit_exchange,
           :rabbit_router,
@@ -26,7 +27,8 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.Mixfile do
           :rabbit_log,
           :rabbit_misc,
           :rabbit_policy_validator,
-          :rabbit_registry
+          :rabbit_registry,
+          :rabbit_policy
         ]
       ]
     ]
