@@ -26,7 +26,8 @@ groups() ->
                                deduplicate_message_confirm,
                                message_acknowledged,
                                queue_overflow,
-                               dead_letter
+                               dead_letter,
+                               queue_policy
                               ]}
     ].
 
@@ -210,6 +211,39 @@ dead_letter(Config) ->
     publish_message(Channel, <<"test">>, "deduplicate-this"),
 
     {#'basic.get_ok'{}, _} = amqp_channel:call(Channel, Get).
+
+queue_policy(Config) ->
+    Channel = rabbit_ct_client_helpers:open_channel(Config),
+
+    #'queue.declare_ok'{} = amqp_channel:call(Channel, #'queue.declare'{queue = <<"test">>}),
+    bind_new_exchange(Channel, <<"test">>, <<"test">>),
+
+    rabbit_ct_broker_helpers:set_policy(Config, 0, <<"policy-test">>,
+        <<".*">>, <<"all">>, [{<<"x-message-deduplication">>, true}]),
+
+    publish_message(Channel, <<"test">>, "deduplicate-this"),
+    publish_message(Channel, <<"test">>, "deduplicate-this"),
+
+    Get = #'basic.get'{queue = <<"test">>},
+    {#'basic.get_ok'{delivery_tag = Tag}, _} = amqp_channel:call(Channel, Get),
+    #'basic.get_empty'{} = amqp_channel:call(Channel, Get),
+    amqp_channel:cast(Channel, #'basic.ack'{delivery_tag = Tag}),
+
+    %% Policy is applied to new queues
+    #'queue.declare_ok'{} = amqp_channel:call(Channel, #'queue.declare'{queue = <<"test0">>}),
+    bind_new_exchange(Channel, <<"test0">>, <<"test0">>),
+
+    publish_message(Channel, <<"test0">>, "deduplicate-this"),
+    publish_message(Channel, <<"test0">>, "deduplicate-this"),
+
+    Get0 = #'basic.get'{queue = <<"test0">>},
+    {#'basic.get_ok'{delivery_tag = Tag0}, _} = amqp_channel:call(Channel, Get0),
+    #'basic.get_empty'{} = amqp_channel:call(Channel, Get0),
+    amqp_channel:cast(Channel, #'basic.ack'{delivery_tag = Tag0}),
+
+    amqp_channel:call(Channel, #'exchange.delete'{exchange = <<"test0">>}),
+    amqp_channel:call(Channel, #'queue.delete'{queue = <<"test0">>}).
+
 
 %% -------------------------------------------------------------------
 %% Utility functions.
