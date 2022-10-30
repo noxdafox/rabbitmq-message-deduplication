@@ -7,7 +7,8 @@
 
 defmodule RabbitMQMessageDeduplication.Policies do
   @moduledoc """
-  Implement RabbitMQ policy validator behaviour.
+  Implement RabbitMQ policy validator behaviour to validate
+  the plugin specific policies.
   """
 
   alias :rabbit_registry, as: RabbitRegistry
@@ -48,25 +49,25 @@ defmodule RabbitMQMessageDeduplication.Policies do
                                end)
   end
 
-  def policy_validator(<<"x-message-deduplication">>, true), do: :ok
-  def policy_validator(<<"x-message-deduplication">>, false), do: :ok
-  def policy_validator(<<"x-message-deduplication">>, val) do
-    {:error, to_charlist("~t'x-message-deduplication' must be a boolean, got ~p"), [val]};
+  defp policy_validator(<<"x-message-deduplication">>, true), do: :ok
+  defp policy_validator(<<"x-message-deduplication">>, false), do: :ok
+  defp policy_validator(<<"x-message-deduplication">>, val) do
+    {:error, "~t'x-message-deduplication' must be a boolean, got ~p", [val]};
   end
 
-  def policy_validator(<<"x-cache-size">>, val) when is_integer(val) and val > 0, do: :ok
-  def policy_validator(<<"x-cache-size">>, val) do
+  defp policy_validator(<<"x-cache-size">>, val) when is_integer(val) and val > 0, do: :ok
+  defp policy_validator(<<"x-cache-size">>, val) do
     {:error, "~t'x-cache-size' must be an integer greater than 0, got ~p", [val]};
   end
 
-  def policy_validator(<<"x-cache-ttl">>, val) when is_integer(val) and val > 0, do: :ok
-  def policy_validator(<<"x-cache-ttl">>, val) do
+  defp policy_validator(<<"x-cache-ttl">>, val) when is_integer(val) and val > 0, do: :ok
+  defp policy_validator(<<"x-cache-ttl">>, val) do
     {:error, "~t'x-cache-ttl' must be an integer greater than 0, got ~p", [val]};
   end
 
-  def policy_validator(<<"x-cache-persistence">>, "disk"), do: :ok
-  def policy_validator(<<"x-cache-persistence">>, "memory"), do: :ok
-  def policy_validator(<<"x-cache-persistence">>, val) do
+  defp policy_validator(<<"x-cache-persistence">>, "disk"), do: :ok
+  defp policy_validator(<<"x-cache-persistence">>, "memory"), do: :ok
+  defp policy_validator(<<"x-cache-persistence">>, val) do
     {:error, "~t'x-cache-persistence' must be either 'disk' or 'memory', got ~p", [val]};
   end
 end
