@@ -13,7 +13,7 @@ defmodule RabbitMQMessageDeduplication.Policies.Test do
   test "queue policy validation", %{} do
     :ok = Policies.validate_policy([{<<"x-message-deduplication">>, true},
                                     {<<"x-message-deduplication">>, false}])
-    {:error, _msg, ["true"]} = Policies.validate_policy([{<<"x-_msg-deduplication">>, "true"}])
+    {:error, _msg, ["true"]} = Policies.validate_policy([{<<"x-message-deduplication">>, "true"}])
   end
 
   test "queue exchange validation", %{} do
