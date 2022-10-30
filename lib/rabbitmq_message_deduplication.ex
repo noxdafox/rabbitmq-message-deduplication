@@ -20,6 +20,7 @@ defmodule RabbitMQMessageDeduplication do
   def stop(_) do
     RabbitMQMessageDeduplication.Exchange.unregister()
     RabbitMQMessageDeduplication.Queue.disable()
+    RabbitMQMessageDeduplication.PolicyEvent.disable()
   end
 
   def init([]) do

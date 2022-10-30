@@ -54,8 +54,8 @@ defmodule RabbitMQMessageDeduplication.Queue do
   defrecord :basic_properties, :P_basic, extract(
     :P_basic, from_lib: "rabbit_common/include/rabbit_framing.hrl")
 
-  defrecordp :dqack, [:tag, :header]
-  defrecordp :dqstate, [:queue, :dedup_enabled, :queue_state]
+  defrecord :dqack, [:tag, :header]
+  defrecord :dqstate, [:queue, :queue_state, :dedup_enabled]
 
   # The passthrough macros call the underlying backing queue functions
   # The suffixes indicate the arity of the return values
@@ -74,9 +74,9 @@ defmodule RabbitMQMessageDeduplication.Queue do
     quote do
       backing_queue = Application.get_env(__MODULE__, :backing_queue_module)
       dqstate(queue: dqstate(unquote(state), :queue),
-              dedup_enabled: dqstate(unquote(state), :dedup_enabled),
-              queue_state: backing_queue.unquote(function))
-    end
+              queue_state: backing_queue.unquote(function),
+              dedup_enabled: dqstate(unquote(state), :dedup_enabled))
+      end
   end
 
   # Backing queue functions returning a tuple {result, state}
@@ -85,8 +85,8 @@ defmodule RabbitMQMessageDeduplication.Queue do
       backing_queue = Application.get_env(__MODULE__, :backing_queue_module)
       {result, queue_state} = backing_queue.unquote(function)
       {result, dqstate(queue: dqstate(unquote(state), :queue),
-                       dedup_enabled: dqstate(unquote(state), :dedup_enabled),
-                       queue_state: queue_state)}
+                       queue_state: queue_state,
+                       dedup_enabled: dqstate(unquote(state), :dedup_enabled))}
     end
   end
 
@@ -96,8 +96,8 @@ defmodule RabbitMQMessageDeduplication.Queue do
       backing_queue = Application.get_env(__MODULE__, :backing_queue_module)
       {result1, result2, queue_state} = backing_queue.unquote(function)
       {result1, result2, dqstate(queue: dqstate(unquote(state), :queue),
-                                 dedup_enabled: dqstate(unquote(state), :dedup_enabled),
-                                 queue_state: queue_state)}
+                                 queue_state: queue_state,
+                                 dedup_enabled: dqstate(unquote(state), :dedup_enabled))}
     end
   end
 
@@ -149,8 +149,7 @@ defmodule RabbitMQMessageDeduplication.Queue do
 
   @impl :rabbit_backing_queue
   def init(queue, recovery, callback) do
-    state = dqstate(queue: queue, dedup_enabled: false)
-    state = if dedup_queue?(state), do: maybe_init_cache(state), else: state
+    state = maybe_enable_dedup_queue(dqstate(queue: queue))
 
     passthrough1(state) do
       init(queue, recovery, callback)
@@ -183,10 +182,8 @@ defmodule RabbitMQMessageDeduplication.Queue do
 
   @impl :rabbit_backing_queue
   def purge(state = dqstate(queue: queue, queue_state: qs)) do
-    state = if dedup_queue?(state) do
-      state = maybe_init_cache(state)
+    if dedup_queue?(state) do
       :ok = AMQQueue.get_name(queue) |> Common.cache_name() |> Cache.flush()
-      state
     end
 
     passthrough2(state, do: purge(qs))
@@ -213,15 +210,14 @@ defmodule RabbitMQMessageDeduplication.Queue do
   # Optimization for cases in which the queue is empty and the message
   # is delivered straight to the client. Acknowledgement is enabled.
   @impl :rabbit_backing_queue
-  def publish_delivered(message, message_properties, pid, flow, state) do
+  def publish_delivered(message, properties, pid, flow, state) do
     dqstate(queue_state: qs) = state
 
     {ack_tag, state} = passthrough2(state) do
-      publish_delivered(message, message_properties, pid, flow, qs)
+      publish_delivered(message, properties, pid, flow, qs)
     end
 
     if dedup_queue?(state) do
-      state = maybe_init_cache(state)
       head = Common.message_header(message, "x-deduplication-header")
       {dqack(tag: ack_tag, header: head), state}
     else
@@ -268,7 +264,6 @@ defmodule RabbitMQMessageDeduplication.Queue do
       {:empty, state} -> {:empty, state}
       {{message, delivery, ack_tag}, state} ->
         if dedup_queue?(state) do
-          state = maybe_init_cache(state)
           if needs_ack do
             head = Common.message_header(message, "x-deduplication-header")
             {{message, delivery, dqack(tag: ack_tag, header: head)}, state}
@@ -290,7 +285,6 @@ defmodule RabbitMQMessageDeduplication.Queue do
   @impl :rabbit_backing_queue
   def drop(need_ack, state = dqstate(queue: queue, queue_state: qs)) do
     if dedup_queue?(state) do
-      state = maybe_init_cache(state)
       case fetch(need_ack, state) do
         {:empty, state} -> {:empty, state}
         {{message = basic_message(id: id), _, ack_tag}, state} ->
@@ -421,8 +415,13 @@ defmodule RabbitMQMessageDeduplication.Queue do
   end
 
   @impl :rabbit_backing_queue
-  def invoke(atom, function, state = dqstate(queue_state: qs)) do
-    passthrough1(state, do: invoke(atom, function, qs))
+  def invoke(__MODULE__, function, state) do
+    function.(__MODULE__, state)
+  end
+
+  @impl :rabbit_backing_queue
+  def invoke(module, function, state = dqstate(queue_state: qs)) do
+    passthrough1(state, do: invoke(module, function, qs))
   end
 
   @impl :rabbit_backing_queue
@@ -430,7 +429,6 @@ defmodule RabbitMQMessageDeduplication.Queue do
     case passthrough2(state, do: is_duplicate(message, qs)) do
       {true, state} -> {true, state}
       {false, state} -> if dedup_queue?(state) do
-                          state = maybe_init_cache(state)
                           {duplicate?(queue, message), state}
                         else
                           {false, state}
@@ -470,22 +468,30 @@ defmodule RabbitMQMessageDeduplication.Queue do
 
   # Utility functions
 
-  # Check if it's a deduplication enabled queue
-  defp dedup_queue?(dqstate(dedup_enabled: true)), do: true
-  defp dedup_queue?(dqstate(queue: queue, dedup_enabled: false)) do
-    args = AMQQueue.get_arguments(queue)
-    policies = case AMQQueue.get_policy(queue) do
-                 :undefined -> []
-                 proplist -> Common.rabbit_keyfind(proplist, :definition, [])
-               end
+  # Set the state according to whether the queue is a deduplication one or not
+  def maybe_enable_dedup_queue(state = dqstate(queue: queue, queue_state: qs)) do
+    if dedup_queue?(state) do
+      :ok = init_cache(queue)
+      dqstate(queue: queue, queue_state: qs, dedup_enabled: true)
+    else
+      dqstate(queue: queue, queue_state: qs, dedup_enabled: :undefined)
+    end
+  end
 
-    Common.rabbit_argument(args ++ policies, "x-message-deduplication", default: false)
+  # Check if it's a deduplication enabled queue
+  defp dedup_queue?(dqstate(dedup_enabled: val)) when is_boolean(val), do: val
+  defp dedup_queue?(dqstate(queue: queue)) do
+    args = AMQQueue.get_arguments(queue)
+    pols = case AMQQueue.get_policy(queue) do
+             :undefined -> []
+             policy -> policy[:definition]
+           end
+
+    Common.rabbit_argument(args ++ pols, "x-message-deduplication", default: false)
   end
 
   # Initialize the deduplication cache
-  defp maybe_init_cache(state = dqstate(dedup_enabled: true)), do: state
-  defp maybe_init_cache(state = dqstate(dedup_enabled: false)) do
-    dqstate(queue: queue, queue_state: qs) = state
+  defp init_cache(queue) do
     cache = queue |> AMQQueue.get_name() |> Common.cache_name()
     ttl = queue
       |> AMQQueue.get_arguments()
@@ -498,8 +504,6 @@ defmodule RabbitMQMessageDeduplication.Queue do
 
     :ok = CacheManager.create(cache, false, options)
     :ok = Cache.flush(cache)
-
-    dqstate(queue: queue, dedup_enabled: true, queue_state: qs)
   end
 
   # Returns true if the message is a duplicate.
