@@ -502,8 +502,11 @@ defmodule RabbitMQMessageDeduplication.Queue do
       "Starting queue deduplication cache ~s with options ~p~n",
       [cache, options])
 
-    :ok = CacheManager.create(cache, false, options)
-    :ok = Cache.flush(cache)
+    case CacheManager.create(cache, false, options) do
+      :ok -> Cache.flush(cache)
+      {:error, {:already_exists, ^cache}} -> Cache.flush(cache)
+      error -> error
+    end
   end
 
   # Returns true if the message is a duplicate.
