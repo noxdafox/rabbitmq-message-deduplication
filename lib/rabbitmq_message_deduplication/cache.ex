@@ -20,6 +20,7 @@ defmodule RabbitMQMessageDeduplication.Cache do
   alias :erlang, as: Erlang
   alias :mnesia, as: Mnesia
 
+  @options [:persistence, :limit, :default_ttl]
   @cache_wait_time Application.get_env(:rabbitmq_message_deduplication, :cache_wait_time)
 
   @doc """
@@ -145,11 +146,21 @@ defmodule RabbitMQMessageDeduplication.Cache do
   @doc """
   Rebalance cache replicas.
   """
+  @spec rebalance_replicas(atom) :: tuple
   def rebalance_replicas(cache) do
     if cache_property(cache, :distributed) do
       cache_rebalance(cache)
     end
   end
+
+  @doc """
+  Change cache options.
+  """
+  @spec reconfigure(atom, atom, any) :: :ok | { :error, any }
+  def reconfigure(cache, option, value) when option in @options do
+    :ok = cache_property(cache, option, value)
+  end
+  def reconfigure(_, option, _), do: {:error, {:invalid, option}}
 
   ## Utility functions
 
@@ -228,6 +239,14 @@ defmodule RabbitMQMessageDeduplication.Cache do
       |> Enum.find(fn(element) -> match?({^property, _}, element) end)
 
     entry
+  end
+
+  # Set the given Mnesia user_properties field
+  defp cache_property(cache, property, value) when property in @options do
+    case Mnesia.write_table_property(cache, {property, value}) do
+      {:atomic, :ok} -> :ok
+      {:aborted, error} -> {:error, error}
+    end
   end
 
   # Rebalance a distributed cache across the cluster nodes
