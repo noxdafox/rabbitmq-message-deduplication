@@ -175,8 +175,16 @@ defmodule RabbitMQMessageDeduplication.Exchange do
   end
 
   @impl :rabbit_exchange_type
-  def policy_changed(_x1, _x2) do
-    :ok
+  def policy_changed(_old, exchange(name: name, policy: policy)) do
+    cache = Common.cache_name(name)
+
+    for policy_definition <- policy[:definition] do
+      case policy_definition do
+        {"x-cache-size", value} -> Cache.reconfigure(cache, :limit, value)
+        {"x-cache-ttl", value} -> Cache.reconfigure(cache, :default_ttl, value)
+        {"x-cache-persistence", value} -> Cache.reconfigure(cache, :persistence, value)
+      end
+    end
   end
 
   @impl :rabbit_exchange_type
