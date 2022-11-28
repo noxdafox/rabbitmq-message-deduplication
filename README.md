@@ -50,14 +50,15 @@ Each message containing the `x-deduplication-header` header will not be routed i
 
 To create a message deduplication exchange, just declare it providing the type `x-message-deduplication`.
 
-Extra arguments:
+Required arguments:
 
   * `x-cache-size`: maximum number of entries for the deduplication cache. If the deduplication cache fills up, older entries will be removed to give space to new ones.
-    This parameter is mandatory.
+  
+Optional arguments:
+
   * `x-cache-ttl`: amount of time in milliseconds duplicate headers are kept in cache.
-    This parameter is optional.
   * `x-cache-persistence`: whether the duplicates cache will persist on disk or in memory.
-    This parameter is optional. Default persistence type is `memory`.
+    Default persistence type is `memory`.
 
 ### Message headers
 
