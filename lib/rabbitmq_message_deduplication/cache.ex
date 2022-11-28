@@ -20,7 +20,7 @@ defmodule RabbitMQMessageDeduplication.Cache do
   alias :erlang, as: Erlang
   alias :mnesia, as: Mnesia
 
-  @options [:persistence, :limit, :default_ttl]
+  @options [:persistence, :size, :ttl]
   @cache_wait_time Application.get_env(:rabbitmq_message_deduplication, :cache_wait_time)
 
   @doc """
@@ -134,7 +134,7 @@ defmodule RabbitMQMessageDeduplication.Cache do
       bytes = words * Erlang.system_info(:wordsize)
       nodes = Mnesia.table_info(cache, cache_property(cache, :persistence))
 
-      case cache_property(cache, :limit) do
+      case cache_property(cache, :size) do
         nil -> [entries: entries, bytes: bytes, nodes: nodes]
         size -> [entries: entries, bytes: bytes, nodes: nodes, size: size]
       end
@@ -176,8 +176,8 @@ defmodule RabbitMQMessageDeduplication.Cache do
                {:index, [:expiration]},
                {:user_properties, [{:distributed, distributed},
                                    {:persistence, persistence},
-                                   {:limit, Keyword.get(options, :size)},
-                                   {:default_ttl, Keyword.get(options, :ttl)}]}]
+                                   {:size, Keyword.get(options, :size)},
+                                   {:ttl, Keyword.get(options, :ttl)}]}]
 
     case Mnesia.create_table(cache, options) do
       {:atomic, :ok} -> wait_for_cache(cache)
@@ -217,12 +217,12 @@ defmodule RabbitMQMessageDeduplication.Cache do
 
   # True if the cache is full, false otherwise.
   defp cache_full?(cache) do
-    Mnesia.table_info(cache, :size) >= cache_property(cache, :limit)
+    Mnesia.table_info(cache, :size) >= cache_property(cache, :size)
   end
 
   # Calculate the expiration given a TTL or the cache default TTL
   defp entry_expiration(cache, ttl) do
-    default = cache_property(cache, :default_ttl)
+    default = cache_property(cache, :ttl)
 
     cond do
       ttl != nil -> Os.system_time(:millisecond) + ttl
