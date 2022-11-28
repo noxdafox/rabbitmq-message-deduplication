@@ -125,7 +125,7 @@ defmodule RabbitMQMessageDeduplication.Cache.Test do
   end
 
   test "reconfigure the cache", %{cache: cache, cache_ttl: _, cache_simple: _} do
-    :ok = Cache.reconfigure(cache, :limit, 10)
+    :ok = Cache.reconfigure(cache, :size, 10)
 
     [entries: _, bytes: _, nodes: _, size: 10] = Cache.info(cache)
 
