@@ -27,7 +27,7 @@ defmodule RabbitMQMessageDeduplication.PolicyEvent do
   alias :gen_event, as: GenEvent
   alias :rabbit_policy, as: RabbitPolicy
   alias :rabbit_amqqueue, as: RabbitQueue
-  alias RabbitMQMessageDeduplication.Queue, as: BackingQueue
+  alias RabbitMQMessageDeduplication.Queue, as: DedupQueue
 
   @behaviour :gen_event
 
@@ -72,10 +72,11 @@ defmodule RabbitMQMessageDeduplication.PolicyEvent do
   defp apply_to_queues() do
     for queue <- RabbitQueue.list() |> Enum.map(&RabbitPolicy.set/1) do
       AMQQueue.get_pid(queue)
-      |> RabbitQueue.run_backing_queue(BackingQueue,
+      |> RabbitQueue.run_backing_queue(DedupQueue,
                                        fn(_, state) ->
-                                         state = BackingQueue.dqstate(state, queue: queue)
-                                         BackingQueue.maybe_enable_dedup_queue(state)
+                                         state
+                                         |> DedupQueue.dqstate(queue: queue)
+                                         |> DedupQueue.maybe_enable_dedup_queue()
                                        end)
     end
   end
