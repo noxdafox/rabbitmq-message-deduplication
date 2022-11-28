@@ -29,6 +29,7 @@ defmodule RabbitMQMessageDeduplication.Exchange do
 
   alias :rabbit_log, as: RabbitLog
   alias :rabbit_misc, as: RabbitMisc
+  alias :rabbit_policy, as: RabbitPolicy
   alias :rabbit_router, as: RabbitRouter
   alias :rabbit_exchange, as: RabbitExchange
   alias :rabbit_registry, as: RabbitRegistry
@@ -175,13 +176,30 @@ defmodule RabbitMQMessageDeduplication.Exchange do
   end
 
   @impl :rabbit_exchange_type
-  def policy_changed(_old, exchange(name: name, policy: policy)) do
+  def policy_changed(_ex, exchange(name: name, arguments: args, policy: :undefined)) do
     cache = Common.cache_name(name)
+
+    RabbitLog.debug(
+      "All policies for exchange ~p were deleted, resetting to defaults ~p ~n",
+      [name, format_options(args)])
+
+    reset_arguments(cache, args)
+  end
+
+  @impl :rabbit_exchange_type
+  def policy_changed(_ex, exch = exchange(name: name, arguments: args, policy: policy)) do
+    cache = Common.cache_name(name)
+
+    RabbitLog.debug("Applying ~s policy to exchange ~p ~n",
+      [RabbitPolicy.name(exch), name])
+
+    # We need to remove old policy before applying new one
+    reset_arguments(cache, args)
 
     for policy_definition <- policy[:definition] do
       case policy_definition do
-        {"x-cache-size", value} -> Cache.reconfigure(cache, :limit, value)
-        {"x-cache-ttl", value} -> Cache.reconfigure(cache, :default_ttl, value)
+        {"x-cache-ttl", value} -> Cache.reconfigure(cache, :ttl, value)
+        {"x-cache-size", value} -> Cache.reconfigure(cache, :size, value)
         {"x-cache-persistence", value} -> Cache.reconfigure(cache, :persistence, value)
       end
     end
@@ -198,8 +216,8 @@ defmodule RabbitMQMessageDeduplication.Exchange do
   end
 
   @impl :rabbit_exchange_type
-  def assert_args_equivalence(exchange, args) do
-    RabbitExchange.assert_args_equivalence(exchange, args)
+  def assert_args_equivalence(exch, args) do
+    RabbitExchange.assert_args_equivalence(exch, args)
   end
 
   @impl :rabbit_exchange_type
@@ -225,6 +243,7 @@ defmodule RabbitMQMessageDeduplication.Exchange do
     not Common.duplicate?(exchange_name, message, ttl)
   end
 
+  # Format arguments into options
   defp format_options(args) do
     [size: Common.rabbit_argument(
         args, "x-cache-size", type: :number),
@@ -232,5 +251,12 @@ defmodule RabbitMQMessageDeduplication.Exchange do
        args, "x-cache-ttl", type: :number),
      persistence: Common.rabbit_argument(
        args, "x-cache-persistence", type: :atom, default: "memory")]
+  end
+
+  # Reconfigure cache to default arguments
+  defp reset_arguments(cache, args) do
+    for {key, value} <- format_options(args) do
+      Cache.reconfigure(cache, key, value)
+    end
   end
 end
