@@ -22,7 +22,7 @@ defmodule RabbitMQMessageDeduplication.Queue do
 
   """
 
-  import Record, only: [defrecord: 2, defrecord: 3, defrecordp: 2, extract: 2]
+  import Record, only: [defrecord: 2, defrecord: 3, extract: 2]
 
   require RabbitMQMessageDeduplication.Cache
   require RabbitMQMessageDeduplication.Common
@@ -55,7 +55,7 @@ defmodule RabbitMQMessageDeduplication.Queue do
     :P_basic, from_lib: "rabbit_common/include/rabbit_framing.hrl")
 
   defrecord :dqack, [:tag, :header]
-  defrecord :dqstate, [:queue, :queue_state, :dedup_enabled]
+  defrecord :dqstate, [:queue, :queue_state, dedup_enabled: false]
 
   # The passthrough macros call the underlying backing queue functions
   # The suffixes indicate the arity of the return values
@@ -149,7 +149,7 @@ defmodule RabbitMQMessageDeduplication.Queue do
 
   @impl :rabbit_backing_queue
   def init(queue, recovery, callback) do
-    state = maybe_enable_dedup_queue(dqstate(queue: queue))
+    state = maybe_toggle_dedup_queue(dqstate(queue: queue))
 
     passthrough1(state) do
       init(queue, recovery, callback)
@@ -164,10 +164,7 @@ defmodule RabbitMQMessageDeduplication.Queue do
   @impl :rabbit_backing_queue
   def delete_and_terminate(any, state = dqstate(queue: queue, queue_state: qs)) do
     if dedup_queue?(state) do
-      queue
-      |> AMQQueue.get_name()
-      |> Common.cache_name()
-      |> CacheManager.destroy()
+      :ok = delete_cache(queue)
     end
 
     passthrough1(state) do
@@ -468,26 +465,17 @@ defmodule RabbitMQMessageDeduplication.Queue do
 
   # Utility functions
 
-  # Set the state according to whether the queue is a deduplication one or not
-  def maybe_enable_dedup_queue(state = dqstate(queue: queue, queue_state: qs)) do
-    if dedup_queue?(state) do
-      :ok = init_cache(queue)
-      dqstate(queue: queue, queue_state: qs, dedup_enabled: true)
-    else
-      dqstate(queue: queue, queue_state: qs, dedup_enabled: :undefined)
+  # Enable/disable queue-level deduplication
+  def maybe_toggle_dedup_queue(state = dqstate(queue: queue, queue_state: qs)) do
+    cond do
+      enable_dedup_queue?(state) ->
+        :ok = init_cache(queue)
+        dqstate(queue: queue, queue_state: qs, dedup_enabled: true)
+      disable_dedup_queue?(state) ->
+        :ok = delete_cache(queue)
+        dqstate(queue: queue, queue_state: qs, dedup_enabled: false)
+      true -> dqstate(queue: queue, queue_state: qs, dedup_enabled: false)
     end
-  end
-
-  # Check if it's a deduplication enabled queue
-  defp dedup_queue?(dqstate(dedup_enabled: val)) when is_boolean(val), do: val
-  defp dedup_queue?(dqstate(queue: queue)) do
-    args = AMQQueue.get_arguments(queue)
-    pols = case AMQQueue.get_policy(queue) do
-             :undefined -> []
-             policy -> policy[:definition]
-           end
-
-    Common.rabbit_argument(args ++ pols, "x-message-deduplication", default: false)
   end
 
   # Initialize the deduplication cache
@@ -507,6 +495,15 @@ defmodule RabbitMQMessageDeduplication.Queue do
       {:error, {:already_exists, ^cache}} -> Cache.flush(cache)
       error -> error
     end
+  end
+
+  # Remove the cache and all its content
+  defp delete_cache(queue) do
+    cache = queue |> AMQQueue.get_name() |> Common.cache_name()
+
+    RabbitLog.debug("Deleting queue deduplication cache ~s~n", [cache])
+
+    CacheManager.destroy(cache)
   end
 
   # Returns true if the message is a duplicate.
@@ -559,4 +556,30 @@ defmodule RabbitMQMessageDeduplication.Queue do
       :exit, {:noproc, {GenServer, :call, [^cache | _]}} -> []
     end
   end
+
+  # True if `x-message-deduplication` is present within queue arguments or policy
+  defp dedup_arg?(queue) do
+    queue_policy(queue)
+    ++ AMQQueue.get_arguments(queue)
+    |> Common.rabbit_argument("x-message-deduplication", default: false)
+  end
+
+  # Return the list of policy arguments assigned to the queue
+  defp queue_policy(queue) do
+    case AMQQueue.get_policy(queue) do
+      :undefined -> []
+      policy -> policy[:definition]
+    end
+  end
+
+  # True if it's an active deduplication queue
+  defp dedup_queue?(dqstate(dedup_enabled: val)), do: val
+
+  # True if deduplication should be enabled for the queue
+  defp enable_dedup_queue?(dqstate(dedup_enabled: true)), do: false
+  defp enable_dedup_queue?(dqstate(queue: q, dedup_enabled: false)), do: dedup_arg?(q)
+
+  # True if deduplication should be disabled for the queue
+  defp disable_dedup_queue?(dqstate(dedup_enabled: false)), do: false
+  defp disable_dedup_queue?(dqstate(queue: q, dedup_enabled: true)), do: not dedup_arg?(q)
 end

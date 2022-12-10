@@ -25,6 +25,7 @@ defmodule RabbitMQMessageDeduplication.PolicyEvent do
 
   alias :amqqueue, as: AMQQueue
   alias :gen_event, as: GenEvent
+  alias :rabbit_log, as: RabbitLog
   alias :rabbit_policy, as: RabbitPolicy
   alias :rabbit_amqqueue, as: RabbitQueue
   alias RabbitMQMessageDeduplication.Queue, as: DedupQueue
@@ -55,29 +56,39 @@ defmodule RabbitMQMessageDeduplication.PolicyEvent do
   def init(_), do: {:ok, []}
 
   @impl :gen_event
-  def handle_event({:event, :policy_set, policy, _, _}, state) do
-    case List.keyfind(policy[:definition], "x-message-deduplication", 0) do
-      {"x-message-deduplication", _} -> apply_to_queues()
-      nil -> 0
+  def handle_event({:event, :queue_policy_updated, policy, _, _}, state) do
+    status = case List.keyfind(policy[:definition], "x-message-deduplication", 0) do
+      {"x-message-deduplication", _} -> apply_to_queue(policy)
+      nil -> :ok
     end
 
-    {:ok, state}
+    {status, state}
   end
+
+  @impl :gen_event
+  def handle_event({:event, :queue_policy_cleared, policy, _, _}, state) do
+    {apply_to_queue(policy), state}
+  end
+
+  @impl :gen_event
   def handle_event(_, state), do: {:ok, state}
 
   @impl :gen_event
   def handle_call(_Request, state), do: {:ok, :not_understood, state}
 
   # Apply new policies to matching queues
-  defp apply_to_queues() do
-    for queue <- RabbitQueue.list() |> Enum.map(&RabbitPolicy.set/1) do
-      AMQQueue.get_pid(queue)
-      |> RabbitQueue.run_backing_queue(DedupQueue,
-                                       fn(_, state) ->
-                                         state
-                                         |> DedupQueue.dqstate(queue: queue)
-                                         |> DedupQueue.maybe_enable_dedup_queue()
-                                       end)
-    end
+  defp apply_to_queue(policy) do
+    {:ok, queue} = RabbitQueue.lookup(policy[:name])
+    queue = RabbitPolicy.set(queue)
+
+    RabbitLog.debug("Policy change for queue ~p ~n", [policy[:name]])
+
+    AMQQueue.get_pid(queue)
+    |> RabbitQueue.run_backing_queue(DedupQueue,
+                                     fn(_, state) ->
+                                       state
+                                       |> DedupQueue.dqstate(queue: queue)
+                                       |> DedupQueue.maybe_toggle_dedup_queue()
+                                     end)
   end
 end
