@@ -242,7 +242,19 @@ queue_policy(Config) ->
     amqp_channel:cast(Channel, #'basic.ack'{delivery_tag = Tag0}),
 
     amqp_channel:call(Channel, #'exchange.delete'{exchange = <<"test0">>}),
-    amqp_channel:call(Channel, #'queue.delete'{queue = <<"test0">>}).
+    amqp_channel:call(Channel, #'queue.delete'{queue = <<"test0">>}),
+
+    % Policy is cleared, default arguments are restored
+    rabbit_ct_broker_helpers:clear_policy(Config, 0, <<"policy-test">>),
+
+    publish_message(Channel, <<"test">>, "deduplicate-this"),
+    publish_message(Channel, <<"test">>, "deduplicate-this"),
+
+    Get = #'basic.get'{queue = <<"test">>},
+    {#'basic.get_ok'{delivery_tag = Tag1}, _} = amqp_channel:call(Channel, Get),
+    {#'basic.get_ok'{delivery_tag = Tag2}, _} = amqp_channel:call(Channel, Get),
+    amqp_channel:cast(Channel, #'basic.ack'{delivery_tag = Tag1}),
+    amqp_channel:cast(Channel, #'basic.ack'{delivery_tag = Tag2}).
 
 
 %% -------------------------------------------------------------------
