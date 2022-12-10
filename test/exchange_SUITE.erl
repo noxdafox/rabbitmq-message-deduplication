@@ -24,7 +24,8 @@ groups() ->
                                declare_exchanges,
                                deduplicate_message,
                                deduplicate_message_ttl,
-                               deduplicate_message_cache_overflow
+                               deduplicate_message_cache_overflow,
+                               exchange_policy
                               ]}
     ].
 
@@ -175,6 +176,36 @@ deduplicate_message_cache_overflow(Config) ->
     {#'basic.get_ok'{}, _} = amqp_channel:call(Channel, Get),
     {#'basic.get_ok'{}, _} = amqp_channel:call(Channel, Get),
     {#'basic.get_ok'{}, _} = amqp_channel:call(Channel, Get).
+
+exchange_policy(Config) ->
+    Get = #'basic.get'{queue = <<"test">>},
+    Channel = rabbit_ct_client_helpers:open_channel(Config),
+
+    #'exchange.declare_ok'{} = amqp_channel:call(
+                                 Channel, make_exchange(<<"test">>, 1, 10000)),
+    bind_new_queue(Channel, <<"test">>, <<"test">>),
+
+    % Cache size is increased to 2. There should not be overflow
+    rabbit_ct_broker_helpers:set_policy(Config, 0, <<"policy-test">>,
+        <<".*">>, <<"all">>, [{<<"x-cache-size">>, 5}]),
+
+    publish_message(Channel, <<"test">>, "deduplicate-this"),
+    publish_message(Channel, <<"test">>, "deduplicate-that"),
+    publish_message(Channel, <<"test">>, "deduplicate-this"),
+
+    {#'basic.get_ok'{}, _} = amqp_channel:call(Channel, Get),
+    {#'basic.get_ok'{}, _} = amqp_channel:call(Channel, Get),
+    #'basic.get_empty'{} = amqp_channel:call(Channel, Get),
+
+    % Policy is cleared, default arguments are restored
+    rabbit_ct_broker_helpers:clear_policy(Config, 0, <<"policy-test">>),
+
+    publish_message(Channel, <<"test">>, "deduplicate-those"),
+    publish_message(Channel, <<"test">>, "deduplicate-those"),
+
+    {#'basic.get_ok'{}, _} = amqp_channel:call(Channel, Get),
+    #'basic.get_empty'{} = amqp_channel:call(Channel, Get).
+
 
 %% -------------------------------------------------------------------
 %% Utility functions.
