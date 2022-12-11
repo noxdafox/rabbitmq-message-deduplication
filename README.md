@@ -8,11 +8,9 @@ Messages can be deduplicated when published into an exchange or enqueued to a qu
 
 ## Installing
 
-Supported RabbitMQ versions:
-
- * \<= 3.8.9 is not supported anymore. Check previous versions of this plugin.
-
 Download the `.ez` files from the chosen [release](https://github.com/noxdafox/rabbitmq-message-deduplication/releases) and copy them into the [RabbitMQ plugins directory](http://www.rabbitmq.com/relocate.html).
+
+Check the Release notes for minimum supported versions.
 
 Enable the plugin:
 
@@ -53,7 +51,7 @@ To create a message deduplication exchange, just declare it providing the type `
 Required arguments:
 
   * `x-cache-size`: maximum number of entries for the deduplication cache. If the deduplication cache fills up, older entries will be removed to give space to new ones.
-  
+
 Optional arguments:
 
   * `x-cache-ttl`: amount of time in milliseconds duplicate headers are kept in cache.
