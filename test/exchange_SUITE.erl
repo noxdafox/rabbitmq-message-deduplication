@@ -21,6 +21,7 @@ all() ->
 groups() ->
     [
      {non_parallel_tests, [], [
+                               disable_enable,
                                declare_exchanges,
                                deduplicate_message,
                                deduplicate_message_ttl,
@@ -64,6 +65,11 @@ end_per_testcase(Testcase, Config) ->
 %% -------------------------------------------------------------------
 %% Testcases.
 %% -------------------------------------------------------------------
+
+%% Basic smoke test that it is possible to disable, then enable the plugin
+disable_enable(Config) ->
+    ok = rabbit_ct_broker_helpers:disable_plugin(Config, 0, rabbitmq_message_deduplication),
+    ok = rabbit_ct_broker_helpers:enable_plugin(Config, 0, rabbitmq_message_deduplication).
 
 declare_exchanges(Config) ->
     Channel = rabbit_ct_client_helpers:open_channel(Config),
