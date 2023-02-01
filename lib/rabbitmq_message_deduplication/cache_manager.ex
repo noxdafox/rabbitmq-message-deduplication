@@ -26,6 +26,7 @@ defmodule RabbitMQMessageDeduplication.CacheManager do
     __MODULE__,
     [description: "message deduplication plugin cache maintenance process",
      mfa: {:rabbit_sup, :start_child, [__MODULE__]},
+     cleanup: {:rabbit_sup, :stop_child, [__MODULE__]},
      requires: :database,
      enables: :external_infrastructure]}
 
