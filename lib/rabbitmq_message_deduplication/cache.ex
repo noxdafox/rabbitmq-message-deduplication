@@ -20,7 +20,7 @@ defmodule RabbitMQMessageDeduplication.Cache do
   alias :erlang, as: Erlang
   alias :mnesia, as: Mnesia
 
-  @options [:persistence, :size, :ttl]
+  @options [:size, :ttl, :distributed, :limit, :default_ttl]
   @cache_wait_time Application.get_env(:rabbitmq_message_deduplication, :cache_wait_time)
 
   @doc """
@@ -131,8 +131,8 @@ defmodule RabbitMQMessageDeduplication.Cache do
     with entries when is_integer(entries) <- Mnesia.table_info(cache, :size),
          words when is_integer(words) <- Mnesia.table_info(cache, :memory)
     do
+      {_, nodes} = cache_layout(cache)
       bytes = words * Erlang.system_info(:wordsize)
-      nodes = Mnesia.table_info(cache, cache_property(cache, :persistence))
 
       case cache_property(cache, :size) do
         nil -> [entries: entries, bytes: bytes, nodes: nodes]
@@ -156,11 +156,30 @@ defmodule RabbitMQMessageDeduplication.Cache do
   @doc """
   Change cache options.
   """
-  @spec reconfigure(atom, atom, any) :: :ok | { :error, any }
-  def reconfigure(cache, option, value) when option in @options do
+  @spec change_option(atom, atom, any) :: :ok | { :error, any }
+  def change_option(cache, option, value) when option in @options do
     :ok = cache_property(cache, option, value)
   end
-  def reconfigure(_, option, _), do: {:error, {:invalid, option}}
+  def change_option(_, option, _), do: {:error, {:invalid, option}}
+
+  @doc """
+  Old caches created prior to v0.6.0 need to be reconfigured.
+  """
+  def maybe_reconfigure(cache) do
+    if cache_property(cache, :distributed) == nil do
+      # Exchange caches are supposed to be distributed but we can't retrieve
+      # such information in any better way than checking how many replicas
+      {_, nodes} = cache_layout(cache)
+      distributed = length(nodes) > 1
+      cache_property(cache, :distributed, distributed)
+
+      cache_property(cache, :size, cache_property(cache, :limit))
+      cache_property(cache, :ttl, cache_property(cache, :default_ttl))
+
+      Mnesia.delete_table_property(cache, :limit)
+      Mnesia.delete_table_property(cache, :default_ttl)
+    end
+  end
 
   ## Utility functions
 
@@ -175,7 +194,6 @@ defmodule RabbitMQMessageDeduplication.Cache do
                {persistence, replicas},
                {:index, [:expiration]},
                {:user_properties, [{:distributed, distributed},
-                                   {:persistence, persistence},
                                    {:size, Keyword.get(options, :size)},
                                    {:ttl, Keyword.get(options, :ttl)}]}]
 
@@ -233,12 +251,7 @@ defmodule RabbitMQMessageDeduplication.Cache do
 
   # Retrieve the given property from the Mnesia user_properties field
   defp cache_property(cache, property) do
-    {^property, entry} =
-      cache
-      |> Mnesia.table_info(:user_properties)
-      |> Enum.find(fn(element) -> match?({^property, _}, element) end)
-
-    entry
+    Mnesia.table_info(cache, :user_properties) |> Keyword.get(property)
   end
 
   # Set the given Mnesia user_properties field
@@ -251,8 +264,7 @@ defmodule RabbitMQMessageDeduplication.Cache do
 
   # Rebalance a distributed cache across the cluster nodes
   defp cache_rebalance(cache) do
-    storage_type = cache_property(cache, :persistence)
-    cache_nodes = Mnesia.table_info(cache, cache_property(cache, :persistence))
+    {storage_type, cache_nodes} = cache_layout(cache)
 
     for node <- cache_replicas(cache_nodes) do
       case Mnesia.add_table_copy(cache, node, storage_type) do
@@ -269,5 +281,13 @@ defmodule RabbitMQMessageDeduplication.Cache do
     replica_number = floor((length(cluster_nodes) * 2) / 3)
 
     Enum.take(cache_nodes ++ (cluster_nodes -- cache_nodes), replica_number)
+  end
+
+  # Returns a tuple {persistence, nodes}
+  defp cache_layout(cache) do
+    case Mnesia.table_info(cache, :ram_copies) do
+      [] -> {:disc_nodes, Mnesia.table_info(cache, :disc_copies)}
+      nodes -> {:ram_nodes, nodes}
+    end
   end
 end
