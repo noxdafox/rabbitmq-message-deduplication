@@ -168,10 +168,9 @@ defmodule RabbitMQMessageDeduplication.Cache do
   def maybe_reconfigure(cache) do
     if cache_property(cache, :distributed) == nil do
       # Exchange caches are supposed to be distributed but we can't retrieve
-      # such information in any better way than checking how many replicas
+      # such information in any better way than checking the number of replicas
       {_, nodes} = cache_layout(cache)
-      distributed = length(nodes) > 1
-      cache_property(cache, :distributed, distributed)
+      cache_property(cache, :distributed, length(nodes) > 1)
 
       cache_property(cache, :size, cache_property(cache, :limit))
       cache_property(cache, :ttl, cache_property(cache, :default_ttl))
