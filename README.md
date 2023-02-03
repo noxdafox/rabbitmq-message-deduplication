@@ -50,7 +50,7 @@ To create a message deduplication exchange, just declare it providing the type `
 
 Required arguments:
 
-  * `x-cache-size`: maximum number of entries for the deduplication cache. If the deduplication cache fills up, older entries will be removed to give space to new ones.
+  * `x-cache-size`: maximum number of entries for the deduplication cache. If the deduplication cache fills up, unspecified existing entries will be removed to give space to new ones.
 
 Optional arguments:
 
