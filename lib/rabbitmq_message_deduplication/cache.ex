@@ -146,7 +146,7 @@ defmodule RabbitMQMessageDeduplication.Cache do
   @doc """
   Rebalance cache replicas.
   """
-  @spec rebalance_replicas(atom) :: tuple
+  @spec rebalance_replicas(atom) :: any
   def rebalance_replicas(cache) do
     if cache_property(cache, :distributed) do
       cache_rebalance(cache)
@@ -162,23 +162,6 @@ defmodule RabbitMQMessageDeduplication.Cache do
   end
   def change_option(_, option, _), do: {:error, {:invalid, option}}
 
-  @doc """
-  Old caches created prior to v0.6.0 need to be reconfigured.
-  """
-  def maybe_reconfigure(cache) do
-    if cache_property(cache, :distributed) == nil do
-      # Exchange caches are supposed to be distributed but we can't retrieve
-      # such information in any better way than checking the number of replicas
-      {_, nodes} = cache_layout(cache)
-      cache_property(cache, :distributed, length(nodes) > 1)
-
-      cache_property(cache, :size, cache_property(cache, :limit))
-      cache_property(cache, :ttl, cache_property(cache, :default_ttl))
-
-      Mnesia.delete_table_property(cache, :limit)
-      Mnesia.delete_table_property(cache, :default_ttl)
-    end
-  end
 
   ## Utility functions
 
@@ -198,8 +181,23 @@ defmodule RabbitMQMessageDeduplication.Cache do
 
     case Mnesia.create_table(cache, options) do
       {:atomic, :ok} -> wait_for_cache(cache)
-      {:aborted, {:already_exists, ^cache, _}} -> wait_for_cache(cache)
+      {:aborted, {:already_exists, _}} -> maybe_reconfigure(cache, distributed)
+      {:aborted, {:already_exists, _, _}} -> maybe_reconfigure(cache, distributed)
       error -> error
+    end
+  end
+
+  # Old caches created prior to v0.6.0 need to be reconfigured.
+  defp maybe_reconfigure(cache, distributed) do
+    if cache_property(cache, :distributed) == nil do
+      cache_property(cache, :distributed, distributed)
+      cache_property(cache, :size, cache_property(cache, :limit))
+      cache_property(cache, :ttl, cache_property(cache, :default_ttl))
+
+      Mnesia.delete_table_property(cache, :limit)
+      Mnesia.delete_table_property(cache, :default_ttl)
+
+      wait_for_cache(cache)
     end
   end
 

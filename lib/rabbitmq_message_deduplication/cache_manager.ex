@@ -95,8 +95,7 @@ defmodule RabbitMQMessageDeduplication.CacheManager do
          :ok <- mnesia_create(Mnesia.add_table_copy(@caches, node(), :ram_copies)),
          :ok <- Mnesia.wait_for_tables([@caches], @cache_wait_time),
          {:ok, _node} <- Mnesia.subscribe(:system)
-      do
-      maybe_reconfigure_caches()
+    do
       Process.send_after(__MODULE__, :cleanup, @cleanup_period)
       {:ok, state}
     else

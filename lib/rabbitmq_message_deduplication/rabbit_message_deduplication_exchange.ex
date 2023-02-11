@@ -149,7 +149,7 @@ defmodule RabbitMQMessageDeduplication.Exchange do
   end
 
   @impl :rabbit_exchange_type
-  def create(:transaction, exchange(name: name, arguments: args)) do
+  def create(_sr, exchange(name: name, arguments: args)) do
     cache = Common.cache_name(name)
     options = format_options(args)
 
@@ -161,19 +161,13 @@ defmodule RabbitMQMessageDeduplication.Exchange do
   end
 
   @impl :rabbit_exchange_type
-  def create(_tx, _ex) do
-    :ok
-  end
-
-  @impl :rabbit_exchange_type
-  def delete(:transaction, exchange(name: name), _bs) do
+  def delete(_sr, exchange(name: name)) do
     name |> Common.cache_name() |> CacheManager.destroy()
   end
 
-  @impl :rabbit_exchange_type
-  def delete(:none, _ex, _bs) do
-    :ok
-  end
+  def delete(:transaction, exchange, _bs), do: delete(:none, exchange)
+
+  def delete(:none, _ex, _bs), do: :ok
 
   @impl :rabbit_exchange_type
   def policy_changed(_ex, exchange(name: name, arguments: args, policy: :undefined)) do
@@ -206,14 +200,10 @@ defmodule RabbitMQMessageDeduplication.Exchange do
   end
 
   @impl :rabbit_exchange_type
-  def add_binding(_tx, _ex, _bs) do
-    :ok
-  end
+  def add_binding(_tx, _ex, _bs), do: :ok
 
   @impl :rabbit_exchange_type
-  def remove_bindings(_tx, _ex, _bs) do
-    :ok
-  end
+  def remove_bindings(_tx, _ex, _bs), do: :ok
 
   @impl :rabbit_exchange_type
   def assert_args_equivalence(exch, args) do
