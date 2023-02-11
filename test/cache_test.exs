@@ -132,7 +132,7 @@ defmodule RabbitMQMessageDeduplication.Cache.Test do
     {:error, {:invalid, :wrong_key}} = Cache.change_option(cache, :wrong_key, 10)
   end
 
-  test "reconfigure old cache", %{cache: cache, cache_ttl: _, cache_simple: _} do
+  test "reconfigure old cache on creation", %{cache: cache, cache_ttl: _, cache_simple: _} do
     Mnesia.delete_table_property(cache, :distributed)
     Mnesia.delete_table_property(cache, :size)
     Mnesia.delete_table_property(cache, :ttl)
@@ -140,10 +140,12 @@ defmodule RabbitMQMessageDeduplication.Cache.Test do
     Mnesia.write_table_property(cache, {:limit, 100})
     Mnesia.write_table_property(cache, {:default_ttl, 100})
 
-    Cache.maybe_reconfigure(cache)
+    cache_options = [size: 1, ttl: nil, persistence: :memory]
+
+    Cache.create(cache, true, cache_options)
 
     {:ttl, 100} = Mnesia.read_table_property(cache, :ttl)
     {:size, 100} = Mnesia.read_table_property(cache, :size)
-    {:distributed, false} = Mnesia.read_table_property(cache, :distributed)
+    {:distributed, true} = Mnesia.read_table_property(cache, :distributed)
   end
 end
