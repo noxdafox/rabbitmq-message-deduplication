@@ -152,9 +152,4 @@ defmodule RabbitMQMessageDeduplication.CacheManager do
   def handle_info({:mnesia_system_event, _event}, state) do
     {:noreply, state}
   end
-
-  defp maybe_reconfigure_caches() do
-    {:atomic, caches} = Mnesia.transaction(fn -> Mnesia.all_keys(@caches) end)
-    Enum.each(caches, &Cache.maybe_reconfigure/1)
-  end
 end
