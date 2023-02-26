@@ -27,6 +27,7 @@ defmodule RabbitMQMessageDeduplication.Cache do
   Create a new cache with the given name and options.
 
   A distributed cache is replicated across multiple nodes.
+
   """
   @spec create(atom, boolean, list) :: :ok | { :error, any }
   def create(cache, distributed, options) do
@@ -162,7 +163,6 @@ defmodule RabbitMQMessageDeduplication.Cache do
   end
   def change_option(_, option, _), do: {:error, {:invalid, option}}
 
-
   ## Utility functions
 
   # Mnesia cache table creation.
@@ -180,24 +180,12 @@ defmodule RabbitMQMessageDeduplication.Cache do
                                    {:ttl, Keyword.get(options, :ttl)}]}]
 
     case Mnesia.create_table(cache, options) do
-      {:atomic, :ok} -> wait_for_cache(cache)
-      {:aborted, {:already_exists, _}} -> maybe_reconfigure(cache, distributed)
-      {:aborted, {:already_exists, _, _}} -> maybe_reconfigure(cache, distributed)
-      error -> error
-    end
-  end
-
-  # Old caches created prior to v0.6.0 need to be reconfigured.
-  defp maybe_reconfigure(cache, distributed) do
-    if cache_property(cache, :distributed) == nil do
-      cache_property(cache, :distributed, distributed)
-      cache_property(cache, :size, cache_property(cache, :limit))
-      cache_property(cache, :ttl, cache_property(cache, :default_ttl))
-
-      Mnesia.delete_table_property(cache, :limit)
-      Mnesia.delete_table_property(cache, :default_ttl)
-
-      wait_for_cache(cache)
+      {:atomic, :ok} ->
+        wait_for_cache(cache)
+      {:aborted, reason} when elem(reason, 0) == :already_exists ->
+        maybe_reconfigure(cache, distributed)
+      error ->
+        error
     end
   end
 
@@ -248,7 +236,7 @@ defmodule RabbitMQMessageDeduplication.Cache do
 
   # Retrieve the given property from the Mnesia user_properties field
   defp cache_property(cache, property) do
-    Mnesia.table_info(cache, :user_properties) |> Keyword.get(property)
+    cache |> Mnesia.table_info(:user_properties) |> Keyword.get(property)
   end
 
   # Set the given Mnesia user_properties field
@@ -265,8 +253,10 @@ defmodule RabbitMQMessageDeduplication.Cache do
 
     for node <- cache_replicas(cache_nodes) do
       case Mnesia.add_table_copy(cache, node, storage_type) do
-        {:atomic, :ok} -> wait_for_cache(cache)
-        {:aborted, {:already_exists, ^cache, _}} -> wait_for_cache(cache)
+        {:atomic, :ok} ->
+          wait_for_cache(cache)
+        {:aborted, reason} when elem(reason, 0) == :already_exists ->
+          maybe_reconfigure(cache, true)
       end
     end
   end
@@ -286,5 +276,19 @@ defmodule RabbitMQMessageDeduplication.Cache do
       [] -> {:disc_nodes, Mnesia.table_info(cache, :disc_copies)}
       nodes -> {:ram_nodes, nodes}
     end
+  end
+
+  # Caches created prior to v0.6.0 need to be reconfigured.
+  defp maybe_reconfigure(cache, distributed) do
+    if cache_property(cache, :distributed) == nil do
+      cache_property(cache, :distributed, distributed)
+      cache_property(cache, :size, cache_property(cache, :limit))
+      cache_property(cache, :ttl, cache_property(cache, :default_ttl))
+
+      Mnesia.delete_table_property(cache, :limit)
+      Mnesia.delete_table_property(cache, :default_ttl)
+    end
+
+    wait_for_cache(cache)
   end
 end
