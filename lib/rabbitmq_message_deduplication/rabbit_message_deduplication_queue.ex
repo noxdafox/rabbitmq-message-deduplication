@@ -29,6 +29,7 @@ defmodule RabbitMQMessageDeduplication.Queue do
 
   alias :amqqueue, as: AMQQueue
   alias :rabbit_log, as: RabbitLog
+  alias :rabbit_amqqueue, as: RabbitQueue
   alias RabbitMQMessageDeduplication.Common, as: Common
   alias RabbitMQMessageDeduplication.Cache, as: Cache
   alias RabbitMQMessageDeduplication.CacheManager, as: CacheManager
@@ -116,6 +117,7 @@ defmodule RabbitMQMessageDeduplication.Queue do
           "Deduplication queues enabled, real BQ is ~s~n", [backing_queue])
         Application.put_env(__MODULE__, :backing_queue_module, backing_queue)
         Application.put_env(:rabbit, :backing_queue_module, __MODULE__)
+        maybe_reconfigure_caches()
     end
   end
 
@@ -474,8 +476,20 @@ defmodule RabbitMQMessageDeduplication.Queue do
       disable_dedup_queue?(state) ->
         :ok = delete_cache(queue)
         dqstate(queue: queue, queue_state: qs, dedup_enabled: false)
-      true -> dqstate(queue: queue, queue_state: qs, dedup_enabled: false)
+      true ->
+        dqstate(queue: queue, queue_state: qs, dedup_enabled: false)
     end
+  end
+
+  # Caches created prior to v0.6.0 need to be reconfigured.
+  defp maybe_reconfigure_caches() do
+    RabbitLog.debug("Deduplication Queues startup, reconfiguring old caches")
+
+    RabbitQueue.list()
+    |> Enum.filter(&dedup_arg?/1)
+    |> Enum.map(&init_cache/1)
+
+    :ok
   end
 
   # Initialize the deduplication cache

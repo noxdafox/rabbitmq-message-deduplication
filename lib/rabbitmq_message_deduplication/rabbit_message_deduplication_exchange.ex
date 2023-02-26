@@ -43,6 +43,7 @@ defmodule RabbitMQMessageDeduplication.Exchange do
     :rabbit_boot_step,
     accumulate: true, persist: true)
 
+  @exchange_type <<"x-message-deduplication">>
   @rabbit_boot_step {__MODULE__,
                      [{:description, "exchange type x-message-deduplication"},
                       {:mfa, {__MODULE__, :register, []}},
@@ -63,7 +64,8 @@ defmodule RabbitMQMessageDeduplication.Exchange do
   """
   @spec register() :: :ok
   def register() do
-    RabbitRegistry.register(:exchange, <<"x-message-deduplication">>, __MODULE__)
+    RabbitRegistry.register(:exchange, @exchange_type, __MODULE__)
+    maybe_reconfigure_caches()
   end
 
   @doc """
@@ -71,13 +73,13 @@ defmodule RabbitMQMessageDeduplication.Exchange do
   """
   @spec unregister() :: :ok
   def unregister() do
-    RabbitRegistry.unregister(:exchange, <<"x-message-deduplication">>)
+    RabbitRegistry.unregister(:exchange, @exchange_type)
   end
 
   @impl :rabbit_exchange_type
   def description() do
     [
-      {:name, <<"x-message-deduplication">>},
+      {:name, @exchange_type},
       {:description, <<"Message Deduplication Exchange.">>}
     ]
   end
@@ -165,9 +167,7 @@ defmodule RabbitMQMessageDeduplication.Exchange do
     name |> Common.cache_name() |> CacheManager.destroy()
   end
 
-  def delete(:transaction, exchange, _bs), do: delete(:none, exchange)
-
-  def delete(:none, _ex, _bs), do: :ok
+  def delete(_tx, exchange, _bs), do: delete(:none, exchange)
 
   @impl :rabbit_exchange_type
   def policy_changed(_ex, exchange(name: name, arguments: args, policy: :undefined)) do
@@ -248,5 +248,16 @@ defmodule RabbitMQMessageDeduplication.Exchange do
     for {key, value} <- format_options(args) do
       Cache.change_option(cache, key, value)
     end
+  end
+
+  # Caches created prior to v0.6.0 need to be reconfigured.
+  defp maybe_reconfigure_caches() do
+    RabbitLog.debug("Deduplication Exchanges startup, reconfiguring old caches")
+
+    RabbitExchange.list()
+    |> Enum.filter(fn(exchange(name: type)) -> type == @exchange_type end)
+    |> Enum.map(fn(exchange) -> create(:none, exchange) end)
+
+    :ok
   end
 end
