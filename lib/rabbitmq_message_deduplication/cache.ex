@@ -273,8 +273,8 @@ defmodule RabbitMQMessageDeduplication.Cache do
   # Returns a tuple {persistence, nodes}
   defp cache_layout(cache) do
     case Mnesia.table_info(cache, :ram_copies) do
-      [] -> {:disc_nodes, Mnesia.table_info(cache, :disc_copies)}
-      nodes -> {:ram_nodes, nodes}
+      [] -> {:disc_copies, Mnesia.table_info(cache, :disc_copies)}
+      nodes -> {:ram_copies, nodes}
     end
   end
 
