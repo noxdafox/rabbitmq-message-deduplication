@@ -2,63 +2,30 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.Mixfile do
   use Mix.Project
 
   def project do
-    deps_dir = case System.get_env("DEPS_DIR") do
-      nil -> "deps"
-      dir -> dir
-    end
-
     [
       app: :rabbitmq_message_deduplication,
       version: "0.6.1",
       build_embedded: Mix.env == :prod,
       start_permanent: Mix.env == :prod,
-      deps_path: deps_dir,
-      deps: deps(deps_dir),
-      aliases: aliases(),
-      xref: [
-        exclude: [
-          :amqqueue,
-          :rabbit_amqqueue,
-          :rabbit_backing_queue,
-          :rabbit_exchange,
-          :rabbit_router,
-          :rabbit_binary_parser,
-          :rabbit_exchange_type,
-          :rabbit_log,
-          :rabbit_misc,
-          :rabbit_policy_validator,
-          :rabbit_registry,
-          :rabbit_policy
-        ]
-      ]
+      deps: deps(),
+      deps_path: System.get_env("DEPS_DIR", "deps"),
+      aliases: aliases()
     ]
   end
 
   def application do
-    applications = case Mix.env do
-      :test -> [:mnesia]
-      _ -> [:rabbit, :mnesia]
-    end
-
     [
-      applications: applications,
-      mod: {RabbitMQMessageDeduplication, []}
+      applications: [:mnesia],
+      extra_applications: [:rabbit],
+      mod: {RabbitMQMessageDeduplication, []},
+      registered: [RabbitMQMessageDeduplication]
     ]
   end
 
-  defp deps(deps_dir) do
+  defp deps() do
     [
       {
-        :rabbit,
-        path: Path.join(deps_dir, "rabbit"),
-        compile: "true",
-        override: true
-      },
-      {
-        :rabbit_common,
-        path: Path.join(deps_dir, "rabbit_common"),
-        compile: "true",
-        override: true
+        :mix_task_archive_deps, "~> 1.0"
       }
     ]
   end
@@ -72,14 +39,15 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.Mixfile do
         "deps.compile"
       ],
       make_app: [
+        "make_deps",
         "compile"
       ],
-      make_all: [
-        "deps.get",
-        "deps.compile",
-        "compile"
+      make_archives: [
+        "archive.build.elixir",
+        "archive.build.all"
       ],
       make_tests: [
+        "make_deps",
         "test"
       ]
     ]

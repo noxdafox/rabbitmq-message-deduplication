@@ -6,23 +6,20 @@ jobs:
     strategy:
       matrix:
         erlang:
-          - 1:25.0.4-1
+          - 1:25.3-1
+        elixir:
+          - 1.13.4-1
+        rmqref:
+          - v3.12.x
     steps:
       - uses: actions/checkout@v2
-      - name: Install Erlang
+      - name: Install Erlang and Elixir
         run: |
           wget https://packages.erlang-solutions.com/erlang-solutions_2.0_all.deb
           sudo dpkg -i erlang-solutions_2.0_all.deb
           sudo apt update
-          sudo apt install -y --allow-downgrades esl-erlang=${{ matrix.erlang }}
-      - name: Install Elixir
-        run: |
-          sudo apt install -y elixir=1.13.4-1
-      - name: Install RMQ requirements
-        run: |
-          wget https://github.com/rabbitmq/mix_task_archive_deps/releases/download/0.5.0/mix_task_archive_deps-0.5.0.ez
-          mix archive.install --force ./mix_task_archive_deps-0.5.0.ez
-          rm mix_task_archive_deps-0.5.0.ez
+          sudo apt install -y --allow-downgrades esl-erlang=${{ matrix.erlang }} elixir=${{ matrix.elixir }}
       - name: Run tests
         run: |
-          make tests
+          make current_rmq_ref=${{ matrix.rmqref }}
+          make tests current_rmq_ref=${{ matrix.rmqref }}
