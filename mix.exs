@@ -43,8 +43,7 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.Mixfile do
         "compile"
       ],
       make_archives: [
-        "archive.build.elixir",
-        "archive.build.all"
+        "archive.build.elixir"
       ],
       make_tests: [
         "make_deps",
