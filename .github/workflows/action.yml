@@ -23,3 +23,11 @@ jobs:
         run: |
           make current_rmq_ref=${{ matrix.rmqref }}
           make tests current_rmq_ref=${{ matrix.rmqref }}
+      - name: Build distribution files
+        run: |
+          DIST_AS_EZS=yes make dist current_rmq_ref=${{ matrix.rmqref }}
+      - name: Store build artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: plugins
+          path: plugins/
