@@ -11,6 +11,7 @@ jobs:
       - uses: actions/checkout@v2
       - name: Install Erlang and Elixir
         run: |
+          sudo add-apt-repository ppa:rabbitmq/rabbitmq-erlang
           sudo apt update
           sudo apt install -y erlang elixir
       - name: Run tests
