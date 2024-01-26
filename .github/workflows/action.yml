@@ -13,7 +13,7 @@ jobs:
         run: |
           sudo add-apt-repository ppa:rabbitmq/rabbitmq-erlang-25
           sudo apt update
-          sudo apt install -y erlang elixir
+          sudo apt install -y erlang elixir-lang
       - name: Run tests
         run: |
           make current_rmq_ref=${{ matrix.rmqref }}
