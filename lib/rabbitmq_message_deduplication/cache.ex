@@ -21,7 +21,7 @@ defmodule RabbitMQMessageDeduplication.Cache do
   alias :mnesia, as: Mnesia
 
   @options [:size, :ttl, :distributed, :limit, :default_ttl]
-  @cache_wait_time Application.get_env(:rabbitmq_message_deduplication, :cache_wait_time)
+  @cache_wait_time Application.compile_env(:rabbitmq_message_deduplication, :cache_wait_time)
 
   @doc """
   Create a new cache with the given name and options.

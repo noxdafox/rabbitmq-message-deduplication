@@ -460,7 +460,7 @@ defmodule RabbitMQMessageDeduplication.Queue do
     passthrough do: zip_msgs_and_acks(delivered_publish, acks, acc, qs)
   end
 
-  @impl :rabbit_backing_queue
+  # Not present anymore in recent versions of RMQ, keeping for old ones
   def handle_info(term, state = dqstate(queue_state: qs)) do
     passthrough1(state, do: set_queue_mode(term, qs))
   end

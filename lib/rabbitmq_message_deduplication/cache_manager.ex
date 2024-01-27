@@ -31,8 +31,8 @@ defmodule RabbitMQMessageDeduplication.CacheManager do
      enables: :external_infrastructure]}
 
   @caches :message_deduplication_caches
-  @cache_wait_time Application.get_env(:rabbitmq_message_deduplication, :cache_wait_time)
-  @cleanup_period Application.get_env(:rabbitmq_message_deduplication, :cache_cleanup_period)
+  @cache_wait_time Application.compile_env(:rabbitmq_message_deduplication, :cache_wait_time)
+  @cleanup_period Application.compile_env(:rabbitmq_message_deduplication, :cache_cleanup_period)
 
   def start_link() do
     GenServer.start_link(__MODULE__, %{}, name: __MODULE__)
