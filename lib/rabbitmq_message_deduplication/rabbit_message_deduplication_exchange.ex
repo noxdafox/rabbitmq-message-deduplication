@@ -53,12 +53,6 @@ defmodule RabbitMQMessageDeduplication.Exchange do
   defrecord :exchange, extract(
     :exchange, from_lib: "rabbit_common/include/rabbit.hrl")
 
-  defrecord :delivery, extract(
-    :delivery, from_lib: "rabbit_common/include/rabbit.hrl")
-
-  defrecord :basic_message, extract(
-    :basic_message, from_lib: "rabbit_common/include/rabbit.hrl")
-
   @doc """
   Register the exchange type within the Broker.
   """
@@ -90,7 +84,7 @@ defmodule RabbitMQMessageDeduplication.Exchange do
   end
 
   @impl :rabbit_exchange_type
-  def route(exchange(name: name), delivery(message: msg = basic_message())) do
+  def route(exchange(name: name), msg, _opts) do
     if route?(name, msg) do
       RabbitRouter.match_routing_key(name, [:_])
     else

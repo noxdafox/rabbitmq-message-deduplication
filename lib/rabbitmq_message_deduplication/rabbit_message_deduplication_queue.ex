@@ -22,7 +22,7 @@ defmodule RabbitMQMessageDeduplication.Queue do
 
   """
 
-  import Record, only: [defrecord: 2, defrecord: 3, extract: 2]
+  import Record, only: [defrecord: 2]
 
   require RabbitMQMessageDeduplication.Cache
   require RabbitMQMessageDeduplication.Common
@@ -30,6 +30,7 @@ defmodule RabbitMQMessageDeduplication.Queue do
   alias :amqqueue, as: AMQQueue
   alias :rabbit_log, as: RabbitLog
   alias :rabbit_amqqueue, as: RabbitQueue
+  alias :mc, as: MC
   alias RabbitMQMessageDeduplication.Common, as: Common
   alias RabbitMQMessageDeduplication.Cache, as: Cache
   alias RabbitMQMessageDeduplication.CacheManager, as: CacheManager
@@ -45,15 +46,6 @@ defmodule RabbitMQMessageDeduplication.Queue do
                       {:mfa, {__MODULE__, :enable, []}},
                       {:requires, :kernel_ready},
                       {:enables, :core_initialized}]}
-
-  defrecord :content, extract(
-    :content, from_lib: "rabbit_common/include/rabbit.hrl")
-
-  defrecord :basic_message, extract(
-    :basic_message, from_lib: "rabbit_common/include/rabbit.hrl")
-
-  defrecord :basic_properties, :P_basic, extract(
-    :P_basic, from_lib: "rabbit_common/include/rabbit_framing.hrl")
 
   defrecord :dqack, [:tag, :header]
   defrecord :dqstate, [:queue, :queue_state, dedup_enabled: false]
@@ -286,8 +278,9 @@ defmodule RabbitMQMessageDeduplication.Queue do
     if dedup_queue?(state) do
       case fetch(need_ack, state) do
         {:empty, state} -> {:empty, state}
-        {{message = basic_message(id: id), _, ack_tag}, state} ->
+        {{message, _, ack_tag}, state} ->
           maybe_delete_cache_entry(queue, message)
+	  id = MC.get_annotation(:id, message)
 
           {{id, ack_tag}, state}
       end
@@ -521,7 +514,7 @@ defmodule RabbitMQMessageDeduplication.Queue do
   end
 
   # Returns true if the message is a duplicate.
-  defp duplicate?(queue, message = basic_message()) do
+  defp duplicate?(queue, message) do
     name = AMQQueue.get_name(queue)
 
     if Common.duplicate?(name, message, message_expiration(message)) do
@@ -533,18 +526,14 @@ defmodule RabbitMQMessageDeduplication.Queue do
 
   # Returns the expiration property of the given message
   defp message_expiration(message) do
-    basic_message(content: content(properties: properties)) = message
-
-    case properties do
-      basic_properties(expiration: ttl) when is_bitstring(ttl) ->
-        String.to_integer(ttl)
-      basic_properties(expiration: :undefined) -> nil
+    case MC.ttl(message) do
       :undefined -> nil
+      ttl -> ttl
     end
   end
 
   # Removes the message deduplication header from the cache
-  defp maybe_delete_cache_entry(queue, msg = basic_message()) do
+  defp maybe_delete_cache_entry(queue, msg) when is_tuple(msg) do
     header = Common.message_header(msg, "x-deduplication-header")
     maybe_delete_cache_entry(queue, header)
   end
