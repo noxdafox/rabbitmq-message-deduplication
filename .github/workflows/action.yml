@@ -2,23 +2,22 @@ name: build
 on: [push, pull_request]
 jobs:
   build:
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
     strategy:
       matrix:
         erlang:
-          - 1:25.3-1
+          - '25.3'
         elixir:
-          - 1.13.4-1
+          - '1.13.4'
         rmqref:
           - v3.12.x
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
       - name: Install Erlang and Elixir
-        run: |
-          wget https://packages.erlang-solutions.com/erlang-solutions_2.0_all.deb
-          sudo dpkg -i erlang-solutions_2.0_all.deb
-          sudo apt update
-          sudo apt install -y --allow-downgrades esl-erlang=${{ matrix.erlang }} elixir=${{ matrix.elixir }}
+        uses: erlef/setup-beam@v1
+        with:
+          otp-version: ${{ matrix.erlang }}
+          elixir-version: ${{ matrix.elixir }}
       - name: Run tests
         run: |
           make current_rmq_ref=${{ matrix.rmqref }}
