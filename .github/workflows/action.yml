@@ -6,9 +6,9 @@ jobs:
     strategy:
       matrix:
         erlang:
-          - '25.3'
+          - '26.2'
         elixir:
-          - '1.13.4'
+          - '1.16.3'
         rmqref:
           - v3.12.x
     steps:
