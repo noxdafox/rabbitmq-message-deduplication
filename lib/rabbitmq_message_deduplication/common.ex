@@ -12,22 +12,10 @@ defmodule RabbitMQMessageDeduplication.Common do
 
   """
 
-  import Record, only: [defrecord: 2, defrecord: 3, extract: 2]
-
   require RabbitMQMessageDeduplication.Cache
 
-  alias :rabbit_binary_parser, as: RabbitBinaryParser
+  alias :mc, as: MC
   alias RabbitMQMessageDeduplication.Cache, as: Cache
-
-  defrecord :content, extract(
-    :content, from_lib: "rabbit_common/include/rabbit.hrl")
-
-  @type basic_message :: record(:basic_message)
-  defrecord :basic_message, extract(
-    :basic_message, from_lib: "rabbit_common/include/rabbit.hrl")
-
-  defrecord :basic_properties, :P_basic, extract(
-    :P_basic, from_lib: "rabbit_common/include/rabbit_framing.hrl")
 
   @default_arguments %{type: nil, default: nil}
 
@@ -55,14 +43,24 @@ defmodule RabbitMQMessageDeduplication.Common do
   @doc """
   Retrieve the given header from the message.
   """
-  @spec message_header(basic_message, String.t) :: String.t | nil
-  def message_header(basic_message(content: message_content), header) do
-    message_content = RabbitBinaryParser.ensure_content_decoded(message_content)
+  @spec message_header(MC.state, String.t) :: String.t | integer() | float() | boolean() | :undefined | nil
+  def message_header(message, header) do
+    case MC.x_header(header, message) do
+      {_type, value} when not is_list(value) and not is_tuple(value) ->
+	# list and tuple values have type-tagged elements
+	# that would need to be untagged recursively
+	# we don't expect to use such headers, so those cases are not handled
+	value
+      :null ->
+	# header value in AMQP message was {:void, :undefined}
 
-    case content(message_content, :properties) do
-      basic_properties(headers: headers) when is_list(headers) ->
-        rabbit_keyfind(headers, header)
-      basic_properties(headers: :undefined) -> nil
+	# pre-3.13 version of this function used rabbit_keyfind/2
+	# which returned :undefined instead of nil or :void. We have to
+	# keep this value as this is used in keys to cache the message
+	# and is preserved during a rolling upgrade in a replicated
+	# Mnesia table
+	:undefined
+      :undefined -> nil
     end
   end
 
@@ -71,7 +69,7 @@ defmodule RabbitMQMessageDeduplication.Common do
 
   If not, it adds it to the cache with the corresponding name.
   """
-  @spec duplicate?(tuple, basic_message, integer | nil) :: boolean
+  @spec duplicate?(tuple, MC.state, integer | nil) :: boolean
   def duplicate?(name, message, ttl \\ nil) do
     cache = cache_name(name)
 

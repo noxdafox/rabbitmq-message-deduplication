@@ -18,7 +18,8 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.Mixfile do
       applications: [:mnesia],
       extra_applications: [:rabbit],
       mod: {RabbitMQMessageDeduplication, []},
-      registered: [RabbitMQMessageDeduplication]
+      registered: [RabbitMQMessageDeduplication],
+      broker_version_requirements: ["3.13.0"]
     ]
   end
 

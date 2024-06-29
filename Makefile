@@ -1,4 +1,5 @@
 PROJECT = rabbitmq_message_deduplication
+PROJ_VSN = $(shell $(MIX) eval 'Mix.Project.config()[:version] |> IO.puts()')
 
 DEPS = rabbit_common rabbit
 TEST_DEPS = rabbitmq_ct_helpers rabbitmq_ct_client_helpers amqp_client
@@ -25,15 +26,15 @@ app:: $(elixir_srcs) deps
 
 dist:: app
 	mkdir -p $(DIST_DIR)
-	$(MIX) make_archives
+	$(MIX) archive.build.elixir
+	$(MIX) archive.build -o $(DIST_DIR)/$(PROJECT)-$(PROJ_VSN).ez
 	cp -r _build/$(MIX_ENV)/archives/elixir-*.ez $(DIST_DIR)
-	cp -r _build/$(MIX_ENV)/archives/$(PROJECT)-*.ez $(DIST_DIR)
 
 test-build:: app
 	mkdir -p $(DIST_DIR)
-	$(MIX) make_archives
+	$(MIX) archive.build.elixir
+	$(MIX) archive.build -o $(DIST_DIR)/$(PROJECT)-$(PROJ_VSN).ez
 	cp -r _build/$(MIX_ENV)/archives/elixir-*.ez $(DIST_DIR)
-	cp -r _build/$(MIX_ENV)/archives/$(PROJECT)-*.ez $(DIST_DIR)
 
 tests:: $(elixir_srcs) deps
 	MIX_ENV=test $(MIX) make_tests

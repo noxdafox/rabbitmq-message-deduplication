@@ -36,6 +36,12 @@ Then copy all the *.ez files inside the plugins folder to the [RabbitMQ plugins 
     [sudo] rabbitmq-plugins enable rabbitmq_message_deduplication
 ```
 
+## Version requirements
+
+The latest version of the plugin requires RabbitMQ 3.13.0.
+
+Earlier RabbitMQ versions are supported by 0.6.2.
+
 ## Exchange level deduplication
 
 The exchange type `x-message-deduplication` allows to filter message duplicates before any routing rule is applied.
