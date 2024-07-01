@@ -2,7 +2,7 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 #
-# Copyright (c) 2017-2023, Matteo Cafasso.
+# Copyright (c) 2017-2024, Matteo Cafasso.
 # All rights reserved.
 
 defmodule RabbitMQMessageDeduplication.Queue do
@@ -27,10 +27,10 @@ defmodule RabbitMQMessageDeduplication.Queue do
   require RabbitMQMessageDeduplication.Cache
   require RabbitMQMessageDeduplication.Common
 
+  alias :mc, as: MC
   alias :amqqueue, as: AMQQueue
   alias :rabbit_log, as: RabbitLog
   alias :rabbit_amqqueue, as: RabbitQueue
-  alias :mc, as: MC
   alias RabbitMQMessageDeduplication.Common, as: Common
   alias RabbitMQMessageDeduplication.Cache, as: Cache
   alias RabbitMQMessageDeduplication.CacheManager, as: CacheManager
