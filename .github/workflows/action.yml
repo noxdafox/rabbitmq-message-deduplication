@@ -11,6 +11,7 @@ jobs:
           - '1.16.3'
         rmqref:
           - v3.13.x
+          - v4.0.x
     steps:
       - uses: actions/checkout@v4
       - name: Install Erlang and Elixir

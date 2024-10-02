@@ -439,6 +439,64 @@ defmodule RabbitMQMessageDeduplication.Queue do
     passthrough1(state, do: set_queue_mode(term, qs))
   end
 
+  #
+  # Compatibility with 3.13.x
+  #
+  @impl :rabbit_backing_queue
+  def publish(message, properties, boolean, pid, flow,
+              state = dqstate(queue_state: qs)) do
+    passthrough1(state) do
+      publish(message, properties, boolean, pid, flow, qs)
+    end
+  end
+
+  @impl :rabbit_backing_queue
+  def batch_publish(batch, pid, flow, state = dqstate(queue_state: qs)) do
+    passthrough1(state, do: batch_publish(batch, pid, flow, qs))
+  end
+
+  # Optimization for cases in which the queue is empty and the message
+  # is delivered straight to the client. Acknowledgement is enabled.
+  @impl :rabbit_backing_queue
+  def publish_delivered(message, properties, pid, flow, state) do
+    dqstate(queue_state: qs) = state
+
+    {ack_tag, state} = passthrough2(state) do
+      publish_delivered(message, properties, pid, flow, qs)
+    end
+
+    if dedup_queue?(state) do
+      head = Common.message_header(message, "x-deduplication-header")
+      {dqack(tag: ack_tag, header: head), state}
+    else
+      {ack_tag, state}
+    end
+  end
+
+  @impl :rabbit_backing_queue
+  def batch_publish_delivered(batch, pid, flow, state) do
+    dqstate(queue_state: qs) = state
+
+    passthrough2(state) do
+      batch_publish_delivered(batch, pid, flow, qs)
+    end
+  end
+
+  @impl :rabbit_backing_queue
+  def discard(msg_id, pid, flow, state = dqstate(queue_state: qs)) do
+    passthrough1(state, do: discard(msg_id, pid, flow, qs))
+  end
+
+  @impl :rabbit_backing_queue
+  def set_ram_duration_target(duration, state = dqstate(queue_state: qs)) do
+    passthrough1(state, do: set_ram_duration_target(duration, qs))
+  end
+
+  @impl :rabbit_backing_queue
+  def ram_duration(state = dqstate(queue_state: qs)) do
+    passthrough2(state, do: ram_duration(qs))
+  end
+
   # Utility functions
 
   # Enable/disable queue-level deduplication
