@@ -1,5 +1,8 @@
 name: build
 on: [push, pull_request]
+env:
+  SERVER_FOLDER: rabbitmq-server
+  PLUGIN_FOLDER: rabbitmq-server/deps/rabbitmq-message-deduplication
 jobs:
   build:
     runs-on: ubuntu-22.04
@@ -13,21 +16,31 @@ jobs:
           - v3.13.x
           - v4.0.x
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout RabbitMQ Server
+        uses: actions/checkout@v4
+        with:
+          repository: rabbitmq/rabbitmq-server
+          path: ${{ env.SERVER_FOLDER }}
+      - name: Checkout Plugin
+        uses: actions/checkout@v4
+        with:
+          path: ${{ env.PLUGIN_FOLDER }}
       - name: Install Erlang and Elixir
         uses: erlef/setup-beam@v1
         with:
           otp-version: ${{ matrix.erlang }}
           elixir-version: ${{ matrix.elixir }}
       - name: Run tests
+        working-directory: ${{ env.PLUGIN_FOLDER }}
         run: |
           make current_rmq_ref=${{ matrix.rmqref }}
           make tests current_rmq_ref=${{ matrix.rmqref }}
       - name: Build distribution files
+        working-directory: ${{ env.PLUGIN_FOLDER }}
         run: |
           DIST_AS_EZS=yes make dist current_rmq_ref=${{ matrix.rmqref }}
       - name: Store build artifacts
         uses: actions/upload-artifact@v3
         with:
           name: plugins
-          path: plugins/
+          path: ${{ env.PLUGIN_FOLDER }}/plugins/
