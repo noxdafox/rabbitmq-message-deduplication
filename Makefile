@@ -26,8 +26,8 @@ app:: $(elixir_srcs) deps
 
 dist:: app
 	mkdir -p $(DIST_DIR)
-	$(MIX) archive.build.elixir
-	$(MIX) archive.build -o $(DIST_DIR)/$(PROJECT)-$(PROJ_VSN).ez
+	MIX_ENV=prod $(MIX) archive.build.elixir
+	MIX_ENV=prod $(MIX) archive.build -o $(DIST_DIR)/$(PROJECT)-$(PROJ_VSN).ez
 	cp -r _build/$(MIX_ENV)/archives/elixir-*.ez $(DIST_DIR)
 
 test-build:: app
