@@ -34,12 +34,11 @@ jobs:
         working-directory: ${{ env.PLUGIN_FOLDER }}
         run: |
           make current_rmq_ref=${{ matrix.rmqref }}
-          make deps
           make tests current_rmq_ref=${{ matrix.rmqref }}
       - name: Build distribution files
         working-directory: ${{ env.PLUGIN_FOLDER }}
         run: |
-          DIST_AS_EZS=yes make dist current_rmq_ref=${{ matrix.rmqref }}
+          MIX_ENV=prod DIST_AS_EZS=yes make dist current_rmq_ref=${{ matrix.rmqref }}
       - name: Store build artifacts
         uses: actions/upload-artifact@v3
         with:
