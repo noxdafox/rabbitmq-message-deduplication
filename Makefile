@@ -16,7 +16,7 @@ elixir_srcs  := mix.exs
 # which is not managed by erlang.mk.
 # We need to instruct the `rabbitmq-dist:do-dist` target to not
 # remove our plugin and related dependencies.
-EXTRA_DIST_EZS = $(shell find $(PWD)/plugins -name *.ez)
+EXTRA_DIST_EZS = $(shell find $(PWD)/plugins -name '*.ez')
 
 app:: $(elixir_srcs) deps
 	$(MIX) make_app
