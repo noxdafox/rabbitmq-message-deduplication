@@ -554,13 +554,9 @@ defmodule RabbitMQMessageDeduplication.Queue do
 
   # Returns true if the message is a duplicate.
   defp duplicate?(queue, message) do
-    name = AMQQueue.get_name(queue)
-
-    if Common.duplicate?(name, message, message_expiration(message)) do
-      {true, :reject}
-    else
-      false
-    end
+    queue
+    |> AMQQueue.get_name()
+    |> Common.duplicate?(message, message_expiration(message))
   end
 
   # Returns the expiration property of the given message
