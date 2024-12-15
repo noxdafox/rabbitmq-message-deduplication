@@ -195,22 +195,26 @@ queue_overflow(Config) ->
 
 dead_letter(Config) ->
     Get = #'basic.get'{queue = <<"test">>},
+    DLGet = #'basic.get'{queue = <<"dead-letter-queue">>},
     Channel = rabbit_ct_client_helpers:open_channel(Config),
 
-    Args = [{<<"x-dead-letter-exchange">>, longstr, "amq.direct"}],
-    #'queue.declare_ok'{} = amqp_channel:call(Channel,
-                                              make_queue(<<"test">>, Args)),
+    #'queue.declare_ok'{} = amqp_channel:call(Channel, make_queue(<<"dead-letter-queue">>)),
+    bind_new_exchange(Channel, <<"dead-letter-exchange">>, <<"dead-letter-queue">>),
+
+    Args = [{<<"x-dead-letter-exchange">>, longstr, "dead-letter-exchange"}],
+    #'queue.declare_ok'{} = amqp_channel:call(Channel, make_queue(<<"test">>, Args)),
     bind_new_exchange(Channel, <<"test">>, <<"test">>),
 
     publish_message(Channel, <<"test">>, "deduplicate-this"),
-
     {#'basic.get_ok'{delivery_tag = Tag}, _} = amqp_channel:call(Channel, Get),
 
     amqp_channel:cast(Channel, #'basic.reject'{delivery_tag = Tag, requeue = false}),
 
     publish_message(Channel, <<"test">>, "deduplicate-this"),
+    {#'basic.get_ok'{}, _} = amqp_channel:call(Channel, Get),
 
-    {#'basic.get_ok'{}, _} = amqp_channel:call(Channel, Get).
+    publish_message(Channel, <<"test">>, "deduplicate-this"),
+    {#'basic.get_ok'{}, _} = amqp_channel:call(Channel, DLGet).
 
 queue_policy(Config) ->
     Channel = rabbit_ct_client_helpers:open_channel(Config),
