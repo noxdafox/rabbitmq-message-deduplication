@@ -39,22 +39,23 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.Mixfile do
     [
       # Do not start the application during unit tests
       test: "test --no-start",
-      make_deps: [
-        "deps.get",
-        "deps.compile"
-      ],
       make_app: [
         "make_deps",
         "compile"
       ],
       make_archives: [
-        "archive.build.elixir",
-        "archive.build.all"
-      ],
+        "archive.build.deps --destination=#{dist_dir()}",
+        "archive.build.elixir --destination=#{dist_dir()}",
+        "archive.build.all --destination=#{dist_dir()}"
+      ]
       make_tests: [
         "make_deps",
         "test"
       ]
     ]
+  end
+
+  defp dist_dir() do
+    System.get_env("DIST_DIR", "plugins")
   end
 end
