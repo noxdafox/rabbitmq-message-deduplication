@@ -40,7 +40,7 @@ jobs:
         run: |
           MIX_ENV=prod DIST_AS_EZS=yes make dist current_rmq_ref=${{ matrix.rmqref }}
       - name: Store build artifacts
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: plugins
           path: ${{ env.PLUGIN_FOLDER }}/plugins/
