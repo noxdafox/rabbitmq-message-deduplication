@@ -1,7 +1,7 @@
 defmodule RabbitMQ.MessageDeduplicationPlugin.Mixfile do
   use Mix.Project
 
-  def project do
+  def project() do
     [
       app: :rabbitmq_message_deduplication,
       version: "0.6.4",
@@ -13,7 +13,7 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.Mixfile do
     ]
   end
 
-  def application do
+  def application() do
     [
       applications: [:mnesia],
       extra_applications: [:rabbit],
@@ -35,7 +35,7 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.Mixfile do
     ]
   end
 
-  defp aliases do
+  defp aliases() do
     [
       # Do not start the application during unit tests
       test: "test --no-start",
