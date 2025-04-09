@@ -47,7 +47,7 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.Mixfile do
         "archive.build.deps --destination=#{dist_dir()}",
         "archive.build.elixir --destination=#{dist_dir()}",
         "archive.build.all --destination=#{dist_dir()}"
-      ]
+      ],
       make_tests: [
         "make_deps",
         "test"
