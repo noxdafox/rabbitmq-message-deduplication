@@ -15,8 +15,7 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.Mixfile do
 
   def application() do
     [
-      applications: [:mnesia],
-      extra_applications: [:rabbit],
+      applications: [:mnesia, :rabbit],
       mod: {RabbitMQMessageDeduplication, []},
       registered: [RabbitMQMessageDeduplication],
       broker_version_requirements: if Mix.env == :prod do
@@ -33,8 +32,10 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.Mixfile do
 
   defp aliases() do
     [
-      # Do not start the application during unit tests
-      test: "test --no-start",
+      make_deps: [
+        "deps.get",
+        "deps.compile"
+      ],
       make_app: [
         "make_deps",
         "compile"
@@ -47,7 +48,9 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.Mixfile do
       make_tests: [
         "make_deps",
         "test"
-      ]
+      ],
+      # Do not start the application during unit tests
+      test: "test --no-start"
     ]
   end
 
