@@ -27,12 +27,10 @@ dist:: app
 
 test-build:: app
 	mkdir -p $(DIST_DIR)
-	$(MIX) archive.build.elixir
-	$(MIX) archive.build -o $(DIST_DIR)/$(PROJECT)-$(PROJ_VSN).ez
-	cp -r _build/$(MIX_ENV)/archives/elixir-*.ez $(DIST_DIR)
+	$(MIX) make_archives
 
 tests:: $(elixir_srcs) deps
-	MIX_ENV=test $(MIX) make_tests
+	$(MIX) make_tests
 
 clean::
 	@rm -fr _build
