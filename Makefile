@@ -23,17 +23,13 @@ dist:: app
 	mkdir -p $(DIST_DIR)
 	$(MIX) make_archives
 
-test-build:: app
-	mkdir -p $(DIST_DIR)
-	$(MIX) make_archives
+test-build:: dist
 
 tests:: $(elixir_srcs) deps
 	$(MIX) make_tests
 
 clean::
 	@rm -fr _build
-
-# erlang.mk modules
 
 include rabbitmq-components.mk
 include erlang.mk
