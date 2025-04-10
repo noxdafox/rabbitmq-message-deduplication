@@ -15,7 +15,7 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.Mixfile do
 
   def application() do
     [
-      applications: [:mnesia, :rabbit],
+      extra_applications: [:mnesia, :rabbit],
       mod: {RabbitMQMessageDeduplication, []},
       registered: [RabbitMQMessageDeduplication],
       broker_version_requirements: if Mix.env == :prod do
