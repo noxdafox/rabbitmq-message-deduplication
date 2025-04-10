@@ -33,8 +33,7 @@ jobs:
       - name: Run tests
         working-directory: ${{ env.PLUGIN_FOLDER }}
         run: |
-          make current_rmq_ref=${{ matrix.rmqref }}
-          make tests current_rmq_ref=${{ matrix.rmqref }}
+          MIX_ENV=test make tests current_rmq_ref=${{ matrix.rmqref }}
       - name: Build distribution files
         working-directory: ${{ env.PLUGIN_FOLDER }}
         run: |
