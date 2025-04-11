@@ -32,6 +32,11 @@ jobs:
         working-directory: ${{ env.PLUGIN_FOLDER }}
         run: |
           MIX_ENV=test make tests current_rmq_ref=${{ matrix.PLATFORM.RMQREF }}
+      - name: Store test artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: tests-rmq${{ matrix.PLATFORM.RMQREF }}-erl${{ matrix.PLATFORM.ERLVER }}-elx${{ matrix.PLATFORM.ELXVER }}
+          path: ${{ env.SERVER_FOLDER }}/logs/
       - name: Build distribution files
         working-directory: ${{ env.PLUGIN_FOLDER }}
         run: |
