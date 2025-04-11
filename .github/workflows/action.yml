@@ -5,16 +5,14 @@ env:
   PLUGIN_FOLDER: rabbitmq-server/deps/rabbitmq-message-deduplication
 jobs:
   build:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     strategy:
       matrix:
-        erlang:
-          - '26.2'
-        elixir:
-          - '1.16.3'
-        rmqref:
-          - v3.13.x
-          - v4.0.x
+        PLATFORM:
+          - { RMQREF: "v3.13.x", ERLVER: "26.2", ELXVER: "1.16" }
+          - { RMQREF: "v4.0.x", ERLVER: "26.2", ELXVER: "1.16" }
+          - { RMQREF: "v4.1.x", ERLVER: "27", ELXVER: "1.18" }
+    name: "Broker: ${{ matrix.PLATFORM.RMQREF }} - Erlang: ${{ matrix.PLATFORM.ERLVER }} - Elixir: ${{ matrix.PLATFORM.ELXVER }}"
     steps:
       - name: Checkout RabbitMQ Server
         uses: actions/checkout@v4
@@ -28,18 +26,18 @@ jobs:
       - name: Install Erlang and Elixir
         uses: erlef/setup-beam@v1
         with:
-          otp-version: ${{ matrix.erlang }}
-          elixir-version: ${{ matrix.elixir }}
+          otp-version: ${{ matrix.PLATFORM.ERLVER }}
+          elixir-version: ${{ matrix.PLATFORM.ELXVER }}
       - name: Run tests
         working-directory: ${{ env.PLUGIN_FOLDER }}
         run: |
-          MIX_ENV=test make tests current_rmq_ref=${{ matrix.rmqref }}
+          MIX_ENV=test make tests current_rmq_ref=${{ matrix.PLATFORM.RMQREF }}
       - name: Build distribution files
         working-directory: ${{ env.PLUGIN_FOLDER }}
         run: |
-          MIX_ENV=prod DIST_AS_EZS=yes make dist current_rmq_ref=${{ matrix.rmqref }}
+          MIX_ENV=prod DIST_AS_EZS=yes make dist current_rmq_ref=${{ matrix.PLATFORM.RMQREF }}
       - name: Store build artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: plugins
+          name: plugins-rmq${{ matrix.PLATFORM.RMQREF }}-erl${{ matrix.PLATFORM.ERLVER }}-elx${{ matrix.PLATFORM.ELXVER }}
           path: ${{ env.PLUGIN_FOLDER }}/plugins/
