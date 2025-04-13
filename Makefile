@@ -25,9 +25,7 @@ dist:: app
 	mkdir -p $(DIST_DIR)
 	$(MIX) make_archives
 
-test-build:: dist
-
-tests:: $(elixir_srcs) deps
+tests:: dist
 	$(MIX) make_tests
 
 clean::
