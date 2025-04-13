@@ -19,6 +19,7 @@ jobs:
         with:
           repository: rabbitmq/rabbitmq-server
           path: ${{ env.SERVER_FOLDER }}
+          ref: ${{ matrix.PLATFORM.RMQREF }}
       - name: Checkout Plugin
         uses: actions/checkout@v4
         with:
@@ -31,7 +32,8 @@ jobs:
       - name: Run tests
         working-directory: ${{ env.PLUGIN_FOLDER }}
         run: |
-          MIX_ENV=test make tests current_rmq_ref=${{ matrix.PLATFORM.RMQREF }}
+          git checkout -b ${{ matrix.PLATFORM.RMQREF }}
+          MIX_ENV=test make tests
       - name: Store test artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -40,7 +42,8 @@ jobs:
       - name: Build distribution files
         working-directory: ${{ env.PLUGIN_FOLDER }}
         run: |
-          MIX_ENV=prod DIST_AS_EZS=yes make dist current_rmq_ref=${{ matrix.PLATFORM.RMQREF }}
+          git checkout -b ${{ matrix.PLATFORM.RMQREF }}
+          MIX_ENV=prod DIST_AS_EZS=yes make dist
       - name: Store build artifacts
         uses: actions/upload-artifact@v4
         with:
