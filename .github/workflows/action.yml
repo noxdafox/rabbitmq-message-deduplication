@@ -33,6 +33,7 @@ jobs:
         working-directory: ${{ env.PLUGIN_FOLDER }}
         run: |
           git checkout -b ${{ matrix.PLATFORM.RMQREF }}
+          make
           MIX_ENV=test make tests
       - name: Store test artifacts
         uses: actions/upload-artifact@v4
