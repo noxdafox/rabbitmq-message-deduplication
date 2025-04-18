@@ -19,32 +19,23 @@ jobs:
         with:
           repository: rabbitmq/rabbitmq-server
           path: ${{ env.SERVER_FOLDER }}
-          ref: ${{ matrix.PLATFORM.RMQREF }}
       - name: Checkout Plugin
         uses: actions/checkout@v4
         with:
           path: ${{ env.PLUGIN_FOLDER }}
-      - name: Checkout Plugin branch
-        working-directory: ${{ env.PLUGIN_FOLDER }}
-        run: |
-          git checkout -B ${{ matrix.PLATFORM.RMQREF }}
       - name: Install Erlang and Elixir
         uses: erlef/setup-beam@v1
         with:
           otp-version: ${{ matrix.PLATFORM.ERLVER }}
           elixir-version: ${{ matrix.PLATFORM.ELXVER }}
-      - name: Build RabbitMQ Server & Plugin
-        run: |
-          make -C ${{ env.SERVER_FOLDER }}
-          make -C ${{ env.PLUGIN_FOLDER }}
       - name: Run tests
         working-directory: ${{ env.PLUGIN_FOLDER }}
         run: |
-          make tests MIX_ENV=test
+          make tests RABBITMQ_VERSION=${{ matrix.PLATFORM.RMQREF }} MIX_ENV=test
       - name: Build distribution files
         working-directory: ${{ env.PLUGIN_FOLDER }}
         run: |
-          make dist MIX_ENV=prod DIST_AS_EZS=yes
+          make dist RABBITMQ_VERSION=${{ matrix.PLATFORM.RMQREF }} MIX_ENV=prod DIST_AS_EZS=yes
       - name: Store test artifacts
         uses: actions/upload-artifact@v4
         with:
