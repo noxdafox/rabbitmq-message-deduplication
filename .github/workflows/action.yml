@@ -24,30 +24,32 @@ jobs:
         uses: actions/checkout@v4
         with:
           path: ${{ env.PLUGIN_FOLDER }}
+      - name: Checkout Plugin branch
+        working-directory: ${{ env.PLUGIN_FOLDER }}
+        run: |
+          git checkout -B ${{ matrix.PLATFORM.RMQREF }}
       - name: Install Erlang and Elixir
         uses: erlef/setup-beam@v1
         with:
           otp-version: ${{ matrix.PLATFORM.ERLVER }}
           elixir-version: ${{ matrix.PLATFORM.ELXVER }}
-      - name: Build RabbitMQ Server
-        working-directory: ${{ env.SERVER_FOLDER }}
+      - name: Build RabbitMQ Server & Plugin
         run: |
-          make
+          make -C ${{ env.SERVER_FOLDER }}
+          make -C ${{ env.PLUGIN_FOLDER }}
       - name: Run tests
         working-directory: ${{ env.PLUGIN_FOLDER }}
         run: |
-          git checkout -B ${{ matrix.PLATFORM.RMQREF }}
-          make tests
+          make tests MIX_ENV=test
+      - name: Build distribution files
+        working-directory: ${{ env.PLUGIN_FOLDER }}
+        run: |
+          make dist MIX_ENV=prod DIST_AS_EZS=yes
       - name: Store test artifacts
         uses: actions/upload-artifact@v4
         with:
           name: tests-rmq${{ matrix.PLATFORM.RMQREF }}-erl${{ matrix.PLATFORM.ERLVER }}-elx${{ matrix.PLATFORM.ELXVER }}
           path: ${{ env.SERVER_FOLDER }}/logs/
-      - name: Build distribution files
-        working-directory: ${{ env.PLUGIN_FOLDER }}
-        run: |
-          git checkout -B ${{ matrix.PLATFORM.RMQREF }}
-          MIX_ENV=prod DIST_AS_EZS=yes make dist
       - name: Store build artifacts
         uses: actions/upload-artifact@v4
         with:
