@@ -10,7 +10,7 @@ defmodule RabbitMQMessageDeduplication do
   use Application
 
   # Start a dummy supervisor to enable the Application behaviour.
-  # http://erlang.org/pipermail/erlang-questions/2010-April/050508.html
+  # https://erlang.org/pipermail/erlang-questions/2010-April/050508.html
   @impl true
   def start(_, _) do
     Supervisor.start_link(__MODULE__, [], [])
