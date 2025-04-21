@@ -15,6 +15,7 @@ defmodule RabbitMQMessageDeduplication.Common do
   require RabbitMQMessageDeduplication.Cache
 
   alias :mc, as: MC
+  alias :timer, as: Timer
   alias RabbitMQMessageDeduplication.Cache, as: Cache
 
   @default_arguments %{type: nil, default: nil}
@@ -109,10 +110,23 @@ defmodule RabbitMQMessageDeduplication.Common do
     end
   end
 
+  @doc """
+  Retrieve
+  """
+  def cache_wait_time() do
+    Application.get_env(appname(), :cache_wait_time, Timer.seconds(30))
+  end
+
+  def cleanup_period() do
+    Application.get_env(appname(), :cache_cleanup_period, Timer.seconds(3))
+  end
+
   defp sanitize_string(string) do
     string
     |> String.replace(~r/[-\. ]/, "_")
     |> String.replace("/", "")
     |> String.downcase()
   end
+
+  defp appname(), do: Application.get_application(__MODULE__)
 end

@@ -17,6 +17,7 @@ defmodule RabbitMQMessageDeduplication.CacheManager do
   alias :timer, as: Timer
   alias :mnesia, as: Mnesia
   alias RabbitMQMessageDeduplication.Cache, as: Cache
+  alias RabbitMQMessageDeduplication.Common, as: Common
 
   Module.register_attribute(__MODULE__,
     :rabbit_boot_step,
@@ -30,10 +31,6 @@ defmodule RabbitMQMessageDeduplication.CacheManager do
      requires: :database,
      enables: :external_infrastructure]}
 
-  @caches :message_deduplication_caches
-  @cache_wait_time Application.compile_env(:rabbitmq_message_deduplication, :cache_wait_time)
-  @cleanup_period Application.compile_env(:rabbitmq_message_deduplication, :cache_cleanup_period)
-
   def start_link() do
     GenServer.start_link(__MODULE__, %{}, name: __MODULE__)
   end
@@ -44,7 +41,7 @@ defmodule RabbitMQMessageDeduplication.CacheManager do
   @spec create(atom, boolean, list) :: :ok | { :error, any }
   def create(cache, distributed, options) do
     try do
-      timeout = @cache_wait_time + Timer.seconds(5)
+      timeout = Common.cache_wait_time() + Timer.seconds(5)
 
       GenServer.call(__MODULE__, {:create, cache, distributed, options}, timeout)
     catch
@@ -91,12 +88,12 @@ defmodule RabbitMQMessageDeduplication.CacheManager do
   def init(state) do
     Mnesia.start()
 
-    with :ok <- mnesia_create(Mnesia.create_table(@caches, [])),
-         :ok <- mnesia_create(Mnesia.add_table_copy(@caches, node(), :ram_copies)),
-         :ok <- Mnesia.wait_for_tables([@caches], @cache_wait_time),
+    with :ok <- mnesia_create(Mnesia.create_table(caches(), [])),
+         :ok <- mnesia_create(Mnesia.add_table_copy(caches(), node(), :ram_copies)),
+         :ok <- Mnesia.wait_for_tables([caches()], Common.cache_wait_time()),
          {:ok, _node} <- Mnesia.subscribe(:system)
     do
-      Process.send_after(__MODULE__, :cleanup, @cleanup_period)
+      Process.send_after(__MODULE__, :cleanup, Common.cleanup_period())
       {:ok, state}
     else
       {:timeout, reason} -> {:error, reason}
@@ -106,7 +103,7 @@ defmodule RabbitMQMessageDeduplication.CacheManager do
 
   # Create the cache and add it to the Mnesia caches table
   def handle_call({:create, cache, distributed, options}, _from, state) do
-    function = fn -> Mnesia.write({@caches, cache, :nil}) end
+    function = fn -> Mnesia.write({caches(), cache, :nil}) end
 
     with :ok <- Cache.create(cache, distributed, options),
          {:atomic, result} <- Mnesia.transaction(function)
@@ -120,7 +117,7 @@ defmodule RabbitMQMessageDeduplication.CacheManager do
 
   # Drop the cache and remove it from the Mnesia caches table
   def handle_call({:destroy, cache}, _from, state) do
-    function = fn -> Mnesia.delete({@caches, cache}) end
+    function = fn -> Mnesia.delete({caches(), cache}) end
 
     with :ok <- Cache.drop(cache),
          {:atomic, result} <- Mnesia.transaction(function)
@@ -134,16 +131,16 @@ defmodule RabbitMQMessageDeduplication.CacheManager do
 
   # The maintenance process deletes expired cache entries.
   def handle_info(:cleanup, state) do
-    {:atomic, caches} = Mnesia.transaction(fn -> Mnesia.all_keys(@caches) end)
+    {:atomic, caches} = Mnesia.transaction(fn -> Mnesia.all_keys(caches()) end)
     Enum.each(caches, &Cache.delete_expired_entries/1)
-    Process.send_after(__MODULE__, :cleanup, @cleanup_period)
+    Process.send_after(__MODULE__, :cleanup, Common.cleanup_period())
 
     {:noreply, state}
   end
 
   # On node addition distribute cache tables
   def handle_info({:mnesia_system_event, {:mnesia_up, _node}}, state) do
-    {:atomic, caches} = Mnesia.transaction(fn -> Mnesia.all_keys(@caches) end)
+    {:atomic, caches} = Mnesia.transaction(fn -> Mnesia.all_keys(caches()) end)
     Enum.each(caches, &Cache.rebalance_replicas/1)
 
     {:noreply, state}
@@ -152,4 +149,6 @@ defmodule RabbitMQMessageDeduplication.CacheManager do
   def handle_info({:mnesia_system_event, _event}, state) do
     {:noreply, state}
   end
+
+  def caches(), do: :message_deduplication_caches
 end

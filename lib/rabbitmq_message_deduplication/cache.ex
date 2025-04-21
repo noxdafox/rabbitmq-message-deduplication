@@ -19,9 +19,9 @@ defmodule RabbitMQMessageDeduplication.Cache do
   alias :os, as: Os
   alias :erlang, as: Erlang
   alias :mnesia, as: Mnesia
+  alias RabbitMQMessageDeduplication.Common, as: Common
 
   @options [:size, :ttl, :distributed, :limit, :default_ttl]
-  @cache_wait_time Application.compile_env(:rabbitmq_message_deduplication, :cache_wait_time)
 
   @doc """
   Create a new cache with the given name and options.
@@ -191,7 +191,7 @@ defmodule RabbitMQMessageDeduplication.Cache do
 
   # Wait for the table to be loaded and force it in case of timeout
   defp wait_for_cache(cache) do
-    case Mnesia.wait_for_tables([cache], @cache_wait_time) do
+    case Mnesia.wait_for_tables([cache], Common.cache_wait_time()) do
       {:timeout, [cache]} -> Mnesia.force_load_table(cache)
       result -> result
     end
