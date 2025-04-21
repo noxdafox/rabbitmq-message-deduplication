@@ -52,6 +52,7 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.Mixfile do
         "archive.build.all --destination=#{dist_dir()}"
       ],
       make_tests: [
+        "deps.get",
         "test"
       ],
       # Do not start the application during unit tests
