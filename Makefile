@@ -23,7 +23,7 @@ EXTRA_DIST_EZS = $(shell find $(DIST_DIR) -name '*.ez')
 app:: deps
 	$(MIX) make_app
 
-tests::
+tests:: app test-build
 	$(MIX) make_tests
 
 dist:: app
