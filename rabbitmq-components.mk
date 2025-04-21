@@ -4,7 +4,7 @@
 RABBITMQ_COMMON_DIR ?= .rabbitmq-components.mk.build
 
 rabbitmq-components.mk: rabbitmq-components-bootstrap
-	git clone https://github.com/rabbitmq/rabbitmq-server $(RABBITMQ_COMMON_DIR)
+	git clone --depth 1 https://github.com/rabbitmq/rabbitmq-server $(RABBITMQ_COMMON_DIR)
 	cp $(RABBITMQ_COMMON_DIR)/rabbitmq-components.mk ./rabbitmq-components.mk
 	rm -rf $(RABBITMQ_COMMON_DIR)
 
