@@ -11,7 +11,6 @@ defmodule RabbitMQMessageDeduplication.CacheManager.Test do
   alias :timer, as: Timer
   alias :mnesia, as: Mnesia
   alias RabbitMQMessageDeduplication.Cache, as: Cache
-  alias RabbitMQMessageDeduplication.Common, as: Common
   alias RabbitMQMessageDeduplication.CacheManager, as: CacheManager
 
   setup do
@@ -27,7 +26,7 @@ defmodule RabbitMQMessageDeduplication.CacheManager.Test do
     options = [persistence: :memory]
 
     CacheManager.create(:cache, true, options)
-    {:atomic, [:cache]} = Mnesia.transaction(fn -> Mnesia.all_keys(Common.caches()) end)
+    {:atomic, [:cache]} = Mnesia.transaction(fn -> Mnesia.all_keys(caches()) end)
     CacheManager.destroy(:cache)
   end
 
@@ -35,9 +34,9 @@ defmodule RabbitMQMessageDeduplication.CacheManager.Test do
     options = [persistence: :memory]
 
     :ok = CacheManager.create(:cache, false, options)
-    {:atomic, [:cache]} = Mnesia.transaction(fn -> Mnesia.all_keys(Common.caches()) end)
+    {:atomic, [:cache]} = Mnesia.transaction(fn -> Mnesia.all_keys(caches()) end)
     :ok = CacheManager.destroy(:cache)
-    {:atomic, []} = Mnesia.transaction(fn -> Mnesia.all_keys(Common.caches()) end)
+    {:atomic, []} = Mnesia.transaction(fn -> Mnesia.all_keys(caches()) end)
   end
 
   test "cache cleanup routine", %{} do
@@ -54,4 +53,6 @@ defmodule RabbitMQMessageDeduplication.CacheManager.Test do
 
     :ok = CacheManager.destroy(:cache)
   end
+
+  def caches(), do: :message_deduplication_caches
 end
