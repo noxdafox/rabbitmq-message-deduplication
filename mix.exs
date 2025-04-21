@@ -19,7 +19,7 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.Mixfile do
       mod: {RabbitMQMessageDeduplication, []},
       registered: [RabbitMQMessageDeduplication],
       broker_version_requirements: if Mix.env == :prod do
-        ["3.13.0", "4.0.0"]
+        ["3.13.0", "4.0.0", "4.1.0"]
       else
         []
       end
@@ -27,17 +27,23 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.Mixfile do
   end
 
   defp deps() do
-    [{:mix_task_archive_deps, github: "rabbitmq/mix_task_archive_deps"}]
+    [
+      {:mix_task_archive_deps, github: "rabbitmq/mix_task_archive_deps"},
+      # The Application needs to depend on `rabbit` in order to be detected as a plugin.
+      {
+        :rabbit,
+        path: "../rabbit",  # We build inside rabbitmq-server/deps
+        compile: "true",    # erlang.mk compiles `rabbit`, hence a no-op
+        override: true
+      }
+    ]
   end
 
   defp aliases() do
     [
-      make_deps: [
-        "deps.get",
-        "deps.compile"
-      ],
       make_app: [
-        "make_deps",
+        "deps.get",
+        "deps.compile",
         "compile"
       ],
       make_archives: [
@@ -46,7 +52,6 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.Mixfile do
         "archive.build.all --destination=#{dist_dir()}"
       ],
       make_tests: [
-        "make_deps",
         "test"
       ],
       # Do not start the application during unit tests
