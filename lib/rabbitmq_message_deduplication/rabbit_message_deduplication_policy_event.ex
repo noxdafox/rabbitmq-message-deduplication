@@ -81,7 +81,7 @@ defmodule RabbitMQMessageDeduplication.PolicyEvent do
     {:ok, queue} = RabbitQueue.lookup(policy[:name])
     queue = RabbitPolicy.set(queue)
 
-    RabbitLog.debug("Policy change for queue ~p ~n", [policy[:name]])
+    RabbitLog.debug("Policy change for queue ~p~n", [policy[:name]])
 
     AMQQueue.get_pid(queue)
     |> RabbitQueue.run_backing_queue(DedupQueue,

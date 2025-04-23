@@ -515,7 +515,7 @@ defmodule RabbitMQMessageDeduplication.Queue do
 
   # Caches created prior to v0.6.0 need to be reconfigured.
   defp maybe_reconfigure_caches() do
-    RabbitLog.debug("Deduplication Queues startup, reconfiguring old caches")
+    RabbitLog.debug("Deduplication Queues startup, reconfiguring old caches~n")
 
     RabbitQueue.list()
     |> Enum.filter(&dedup_arg?/1)
