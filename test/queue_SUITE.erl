@@ -224,6 +224,8 @@ queue_policy(Config) ->
 
     rabbit_ct_broker_helpers:set_policy(Config, 0, <<"policy-test">>,
         <<".*">>, <<"all">>, [{<<"x-message-deduplication">>, true}]),
+    %% Wait for policy propagation
+    timer:sleep(1000),
 
     publish_message(Channel, <<"test">>, "deduplicate-this"),
     publish_message(Channel, <<"test">>, "deduplicate-this"),
