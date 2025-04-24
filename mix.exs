@@ -15,6 +15,7 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.Mixfile do
 
   def application() do
     [
+      # The Application needs to depend on `rabbit` in order to be detected as a plugin.
       extra_applications: [:mnesia, :rabbit],
       mod: {RabbitMQMessageDeduplication, []},
       registered: [RabbitMQMessageDeduplication],
@@ -28,14 +29,7 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.Mixfile do
 
   defp deps() do
     [
-      {:mix_task_archive_deps, github: "rabbitmq/mix_task_archive_deps"},
-      # The Application needs to depend on `rabbit` in order to be detected as a plugin.
-      {
-        :rabbit,
-        path: "../rabbit",  # We build inside rabbitmq-server/deps
-        compile: "true",    # erlang.mk compiles `rabbit`, hence a no-op
-        override: true
-      }
+      {:mix_task_archive_deps, github: "rabbitmq/mix_task_archive_deps"}
     ]
   end
 
