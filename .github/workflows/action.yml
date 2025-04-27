@@ -45,4 +45,6 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: plugins-rmq${{ matrix.PLATFORM.RMQREF }}-erl${{ matrix.PLATFORM.ERLVER }}-elx${{ matrix.PLATFORM.ELXVER }}
-          path: ${{ env.PLUGIN_FOLDER }}/plugins/
+          path: |
+            ${{ env.PLUGIN_FOLDER }}/plugins/elixir-${{ matrix.PLATFORM.ELXVER }}.*.ez
+            ${{ env.PLUGIN_FOLDER }}/plugins/rabbitmq_message_deduplication-[0-9].*.ez
