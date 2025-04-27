@@ -213,7 +213,21 @@ defmodule RabbitMQMessageDeduplication.Queue do
 
   @impl :rabbit_backing_queue
   def discard(msg_id, pid, state = dqstate(queue_state: qs)) do
+  # v4.0.x
+  def discard(msg_id, pid, state = dqstate(queue_state: qs)) when is_binary(msg_id) do
     passthrough1(state, do: discard(msg_id, pid, qs))
+  end
+  @impl :rabbit_backing_queue
+  def discard(message, pid, state = dqstate(queue: queue, queue_state: qs)) do
+    if dedup_queue?(state) do
+      maybe_delete_cache_entry(queue, message)
+    end
+
+    passthrough1(state, do: discard(message, pid, qs))
+  end
+  # v3.13.x
+  def discard(msg_id, pid, flow, state = dqstate(queue_state: qs)) do
+    passthrough1(state, do: discard(msg_id, pid, flow, qs))
   end
 
   @impl :rabbit_backing_queue
