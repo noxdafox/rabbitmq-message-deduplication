@@ -27,6 +27,7 @@ groups() ->
                                message_acknowledged,
                                queue_overflow,
                                dead_letter,
+                               consume_no_ack,
                                queue_policy
                               ]}
     ].
@@ -215,6 +216,32 @@ dead_letter(Config) ->
 
     publish_message(Channel, <<"test">>, "deduplicate-this"),
     {#'basic.get_ok'{}, _} = amqp_channel:call(Channel, DLGet).
+
+consume_no_ack(Config) ->
+    Channel = rabbit_ct_client_helpers:open_channel(Config),
+
+    #'queue.declare_ok'{queue = Q} = amqp_channel:call(Channel, make_queue(<<"no-ack-queue">>)),
+    bind_new_exchange(Channel, <<"test">>, <<"no-ack-queue">>),
+
+    #'basic.consume_ok'{consumer_tag = _Tag} =
+        amqp_channel:subscribe(Channel, #'basic.consume'{queue = Q, no_ack = true}, self()),
+    receive
+        #'basic.consume_ok'{} -> ok
+    end,
+
+    publish_message(Channel, <<"test">>, "deduplicate-this"),
+    receive
+        {#'basic.deliver'{}, _} -> ok
+    after 1000 ->
+        error(message_not_received)
+    end,
+
+    publish_message(Channel, <<"test">>, "deduplicate-this"),
+    receive
+        {#'basic.deliver'{}, _} -> ok
+    after 1000 ->
+        error(message_not_received)
+    end.
 
 queue_policy(Config) ->
     Channel = rabbit_ct_client_helpers:open_channel(Config),
