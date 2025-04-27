@@ -4,7 +4,7 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.Mixfile do
   def project() do
     [
       app: :rabbitmq_message_deduplication,
-      version: "0.6.4",
+      version: "0.7.0",
       build_embedded: Mix.env == :prod,
       start_permanent: Mix.env == :prod,
       deps: deps(),
