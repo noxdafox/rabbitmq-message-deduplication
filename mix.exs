@@ -29,7 +29,7 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.Mixfile do
 
   defp deps() do
     [
-      {:mix_task_archive_deps, github: "rabbitmq/mix_task_archive_deps"}
+      {:mix_task_archive_deps, github: "rabbitmq/mix_task_archive_deps", runtime: false}
     ]
   end
 
