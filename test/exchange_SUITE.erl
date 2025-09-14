@@ -129,16 +129,12 @@ deduplicate_message(Config) ->
     bind_new_queue(Channel, <<"test">>, <<"test">>),
 
     %% Deduplication header present
-    publish_message(Channel, <<"test">>, "deduplicate-this"),
-    publish_message(Channel, <<"test">>, "deduplicate-this"),
-
+    publish_messages(Channel, <<"test">>, "deduplicate-this", 5),
     {#'basic.get_ok'{}, _} = amqp_channel:call(Channel, Get),
     #'basic.get_empty'{} = amqp_channel:call(Channel, Get),
 
     %% Deduplication header absent
-    publish_message(Channel, <<"test">>),
-    publish_message(Channel, <<"test">>),
-
+    publish_messages(Channel, <<"test">>, 2),
     {#'basic.get_ok'{}, _} = amqp_channel:call(Channel, Get),
     {#'basic.get_ok'{}, _} = amqp_channel:call(Channel, Get).
 
@@ -151,19 +147,17 @@ deduplicate_message_ttl(Config) ->
     bind_new_queue(Channel, <<"test">>, <<"test">>),
 
     %% Exchange default TTL
-    publish_message(Channel, <<"test">>, "deduplicate-this"),
+    publish_messages(Channel, <<"test">>, "deduplicate-this", 1),
     timer:sleep(2000),
-    publish_message(Channel, <<"test">>, "deduplicate-this"),
-
+    publish_messages(Channel, <<"test">>, "deduplicate-this", 1),
     {#'basic.get_ok'{}, _} = amqp_channel:call(Channel, Get),
     {#'basic.get_ok'{}, _} = amqp_channel:call(Channel, Get),
 
     %% Message TTL override
     Headers = [{<<"x-cache-ttl">>, long, 500}],
-    publish_message(Channel, <<"test">>, "deduplicate-that", Headers),
+    publish_messages(Channel, <<"test">>, "deduplicate-that", Headers, 1),
     timer:sleep(800),
-    publish_message(Channel, <<"test">>, "deduplicate-that", Headers),
-
+    publish_messages(Channel, <<"test">>, "deduplicate-that", Headers, 1),
     {#'basic.get_ok'{}, _} = amqp_channel:call(Channel, Get),
     {#'basic.get_ok'{}, _} = amqp_channel:call(Channel, Get).
 
@@ -175,10 +169,10 @@ deduplicate_message_cache_overflow(Config) ->
                                  Channel, make_exchange(<<"test">>, 1, 10000)),
     bind_new_queue(Channel, <<"test">>, <<"test">>),
 
-    publish_message(Channel, <<"test">>, "deduplicate-this"),
-    publish_message(Channel, <<"test">>, "deduplicate-that"),
-    publish_message(Channel, <<"test">>, "deduplicate-this"),
-
+    % Oveflow message will lead to no deduplication
+    publish_messages(Channel, <<"test">>, "deduplicate-this", 1),
+    publish_messages(Channel, <<"test">>, "deduplicate-that", 1),
+    publish_messages(Channel, <<"test">>, "deduplicate-this", 1),
     {#'basic.get_ok'{}, _} = amqp_channel:call(Channel, Get),
     {#'basic.get_ok'{}, _} = amqp_channel:call(Channel, Get),
     {#'basic.get_ok'{}, _} = amqp_channel:call(Channel, Get).
@@ -194,21 +188,16 @@ exchange_policy(Config) ->
     % Cache size is increased to 2. There should not be overflow
     rabbit_ct_broker_helpers:set_policy(Config, 0, <<"policy-test">>,
         <<".*">>, <<"all">>, [{<<"x-cache-size">>, 5}]),
-
-    publish_message(Channel, <<"test">>, "deduplicate-this"),
-    publish_message(Channel, <<"test">>, "deduplicate-that"),
-    publish_message(Channel, <<"test">>, "deduplicate-this"),
-
+    publish_messages(Channel, <<"test">>, "deduplicate-this", 1),
+    publish_messages(Channel, <<"test">>, "deduplicate-that", 1),
+    publish_messages(Channel, <<"test">>, "deduplicate-this", 1),
     {#'basic.get_ok'{}, _} = amqp_channel:call(Channel, Get),
     {#'basic.get_ok'{}, _} = amqp_channel:call(Channel, Get),
     #'basic.get_empty'{} = amqp_channel:call(Channel, Get),
 
     % Policy is cleared, default arguments are restored
     rabbit_ct_broker_helpers:clear_policy(Config, 0, <<"policy-test">>),
-
-    publish_message(Channel, <<"test">>, "deduplicate-those"),
-    publish_message(Channel, <<"test">>, "deduplicate-those"),
-
+    publish_messages(Channel, <<"test">>, "deduplicate-those", 5),
     {#'basic.get_ok'{}, _} = amqp_channel:call(Channel, Get),
     #'basic.get_empty'{} = amqp_channel:call(Channel, Get).
 
@@ -231,17 +220,23 @@ bind_new_queue(Ch, Ex, Q) ->
     Binding = #'queue.bind'{queue = Q, exchange = Ex, routing_key = <<"#">>},
     #'queue.bind_ok'{} = amqp_channel:call(Ch, Binding).
 
-publish_message(Ch, Ex) ->
+publish_messages(_Ch, _Ex, 0) ->
+    ok;
+publish_messages(Ch, Ex, N) ->
     Publish = #'basic.publish'{exchange = Ex, routing_key = <<"#">>},
     Msg = #amqp_msg{payload = <<"payload">>},
-    amqp_channel:cast(Ch, Publish, Msg).
+    amqp_channel:cast(Ch, Publish, Msg),
+    publish_messages(Ch, Ex, N-1).
 
-publish_message(Ch, Ex, D) ->
-    publish_message(Ch, Ex, D, []).
+publish_messages(Ch, Ex, D, N) ->
+    publish_messages(Ch, Ex, D, [], N).
 
-publish_message(Ch, Ex, D, H) ->
+publish_messages(_Ch, _Ex, _D, _H, 0) ->
+    ok;
+publish_messages(Ch, Ex, D, H, N) ->
     Headers = [{<<"x-deduplication-header">>, longstr, D}] ++ H,
     Publish = #'basic.publish'{exchange = Ex, routing_key = <<"#">>},
     Props = #'P_basic'{headers = Headers},
     Msg = #amqp_msg{props = Props, payload = <<"payload">>},
-    amqp_channel:cast(Ch, Publish, Msg).
+    amqp_channel:cast(Ch, Publish, Msg),
+    publish_messages(Ch, Ex, D, H, N-1).
