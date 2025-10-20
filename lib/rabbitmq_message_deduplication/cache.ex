@@ -81,6 +81,17 @@ defmodule RabbitMQMessageDeduplication.Cache do
   end
 
   @doc """
+  Check whether the entry exists within the cache.
+  """
+  @spec exists?(atom, any) :: { :ok, boolean } | { :error, any }
+  def exists?(cache, entry) do
+    case Mnesia.transaction(fn -> cache_member?(cache, entry) end) do
+      {:atomic, result} -> {:ok, result}
+      {:aborted, reason} -> {:error, reason}
+    end
+  end
+
+  @doc """
   Flush the cache content.
   """
   @spec flush(atom) :: :ok | { :error, any }
