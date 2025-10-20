@@ -47,6 +47,8 @@ defmodule RabbitMQMessageDeduplication.Queue do
                       {:requires, :kernel_ready},
                       {:enables, :core_initialized}]}
 
+  @dedup_header "x-deduplication-header"
+
   defrecord :dqack, [:tag, :header]
   defrecord :dqstate, [:queue, :queue_state, dedup_enabled: false]
 
