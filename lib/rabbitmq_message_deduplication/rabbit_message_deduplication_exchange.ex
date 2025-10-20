@@ -223,8 +223,16 @@ defmodule RabbitMQMessageDeduplication.Exchange do
 
   # Whether to route the message or not.
   defp route?(exchange_name, message) do
+    cache = Common.cache_name(exchange_name)
     ttl = Common.message_header(message, "x-cache-ttl")
-    not Common.duplicate?(exchange_name, message, ttl)
+
+    case Common.message_header(message, "x-deduplication-header") do
+      nil -> true
+      key -> case Cache.insert(cache, key, ttl) do
+               {:ok, :exists} -> false
+               {:ok, :inserted} -> true
+             end
+    end
   end
 
   # Format arguments into options
