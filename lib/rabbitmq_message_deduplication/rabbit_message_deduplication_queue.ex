@@ -189,14 +189,16 @@ defmodule RabbitMQMessageDeduplication.Queue do
 
   @impl :rabbit_backing_queue
   def publish(message, properties, boolean, pid,
-              state = dqstate(queue_state: qs)) do
+              state = dqstate(queue: queue, queue_state: qs)) do
+    maybe_insert_cache_entry(message, queue, state)
     passthrough1(state) do
       publish(message, properties, boolean, pid, qs)
     end
   end
   # v3.13.x
   def publish(message, properties, boolean, pid, flow,
-              state = dqstate(queue_state: qs)) do
+              state = dqstate(queue: queue, queue_state: qs)) do
+    maybe_insert_cache_entry(message, queue, state)
     passthrough1(state) do
       publish(message, properties, boolean, pid, flow, qs)
     end
@@ -206,45 +208,41 @@ defmodule RabbitMQMessageDeduplication.Queue do
   # is delivered straight to the client. Acknowledgement is enabled.
   @impl :rabbit_backing_queue
   def publish_delivered(message, properties, pid, state) do
-    dqstate(queue_state: qs) = state
+    dqstate(queue: queue, queue_state: qs) = state
+
+    maybe_insert_cache_entry(message, queue, state)
 
     {ack_tag, state} = passthrough2(state) do
       publish_delivered(message, properties, pid, qs)
     end
 
     if dedup_queue?(state) do
-      head = Common.message_header(message, "x-deduplication-header")
-      {dqack(tag: ack_tag, header: head), state}
+      header = Common.message_header(message, @dedup_header)
+      {dqack(tag: ack_tag, header: header), state}
     else
       {ack_tag, state}
     end
   end
   # v3.13.x
   def publish_delivered(message, properties, pid, flow, state) do
-    dqstate(queue_state: qs) = state
+    dqstate(queue: queue, queue_state: qs) = state
+
+    maybe_insert_cache_entry(message, queue, state)
 
     {ack_tag, state} = passthrough2(state) do
       publish_delivered(message, properties, pid, flow, qs)
     end
 
     if dedup_queue?(state) do
-      head = Common.message_header(message, "x-deduplication-header")
-      {dqack(tag: ack_tag, header: head), state}
+      header = Common.message_header(message, @dedup_header)
+      {dqack(tag: ack_tag, header: header), state}
     else
       {ack_tag, state}
     end
   end
 
-  # v4.0.x
-  def discard(msg_id, pid, state = dqstate(queue_state: qs)) when is_binary(msg_id) do
-    passthrough1(state, do: discard(msg_id, pid, qs))
-  end
   @impl :rabbit_backing_queue
-  def discard(message, pid, state = dqstate(queue: queue, queue_state: qs)) do
-    if dedup_queue?(state) do
-      maybe_delete_cache_entry(queue, message)
-    end
-
+  def discard(message, pid, state = dqstate(queue_state: qs)) do
     passthrough1(state, do: discard(message, pid, qs))
   end
   # v3.13.x
@@ -278,8 +276,8 @@ defmodule RabbitMQMessageDeduplication.Queue do
       {{message, delivery, ack_tag}, state} ->
         if dedup_queue?(state) do
           if needs_ack do
-            head = Common.message_header(message, "x-deduplication-header")
-            {{message, delivery, dqack(tag: ack_tag, header: head)}, state}
+            header = Common.message_header(message, @dedup_header)
+            {{message, delivery, dqack(tag: ack_tag, header: header)}, state}
           else
             maybe_delete_cache_entry(queue, message)
             {{message, delivery, ack_tag}, state}
@@ -476,13 +474,21 @@ defmodule RabbitMQMessageDeduplication.Queue do
   end
 
   # v3.13.x
-  def batch_publish(batch, pid, flow, state = dqstate(queue_state: qs)) do
+  def batch_publish(batch, pid, flow, state) do
+    dqstate(queue: queue, queue_state: qs) = state
+    Enum.map(batch, fn({message, _, _}) ->
+                      maybe_insert_cache_entry(message, queue, state)
+                    end)
+
     passthrough1(state, do: batch_publish(batch, pid, flow, qs))
   end
 
   # v3.13.x
   def batch_publish_delivered(batch, pid, flow, state) do
-    dqstate(queue_state: qs) = state
+    dqstate(queue: queue, queue_state: qs) = state
+    Enum.map(batch, fn({message, _, _}) ->
+                      maybe_insert_cache_entry(message, queue, state)
+                    end)
 
     passthrough2(state) do
       batch_publish_delivered(batch, pid, flow, qs)
@@ -554,11 +560,26 @@ defmodule RabbitMQMessageDeduplication.Queue do
     CacheManager.destroy(cache)
   end
 
+  # Insert message header in the cache
+  defp maybe_insert_cache_entry(message, queue, state) do
+    with true <- dedup_queue?(state),
+         key when not is_nil(key) <- Common.message_header(message, @dedup_header)
+    do
+      queue
+      |> AMQQueue.get_name()
+      |> Common.cache_name()
+      |> Cache.insert(key, message_expiration(message))
+    end
+  end
+
   # Returns true if the message is a duplicate.
   defp duplicate?(queue, message) do
-    queue
-    |> AMQQueue.get_name()
-    |> Common.duplicate?(message, message_expiration(message))
+    cache = queue |> AMQQueue.get_name() |> Common.cache_name()
+
+    case Common.message_header(message, @dedup_header) do
+      nil -> false
+      key -> Cache.exists?(cache, key) |> elem(1)
+    end
   end
 
   # Returns the expiration property of the given message
@@ -571,7 +592,7 @@ defmodule RabbitMQMessageDeduplication.Queue do
 
   # Removes the message deduplication header from the cache
   defp maybe_delete_cache_entry(queue, msg) when is_tuple(msg) do
-    header = Common.message_header(msg, "x-deduplication-header")
+    header = Common.message_header(msg, @dedup_header)
     maybe_delete_cache_entry(queue, header)
   end
 
