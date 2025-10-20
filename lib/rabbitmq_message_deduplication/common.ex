@@ -44,7 +44,8 @@ defmodule RabbitMQMessageDeduplication.Common do
   @doc """
   Retrieve the given header from the message.
   """
-  @spec message_header(MC.state, String.t) :: String.t | integer() | float() | boolean() | :undefined | nil
+  @spec message_header(MC.state, String.t) ::
+    String.t | integer | float | boolean | :undefined | nil
   def message_header(message, header) do
     case MC.x_header(header, message) do
       {_type, value} when not is_list(value) and not is_tuple(value) ->
@@ -62,24 +63,6 @@ defmodule RabbitMQMessageDeduplication.Common do
 	# Mnesia table
 	:undefined
       :undefined -> nil
-    end
-  end
-
-  @doc """
-  Check if the routed/queued message is a duplicate.
-
-  If not, it adds it to the cache with the corresponding name.
-  """
-  @spec duplicate?(tuple, MC.state, integer | nil) :: boolean
-  def duplicate?(name, message, ttl \\ nil) do
-    cache = cache_name(name)
-
-    case message_header(message, "x-deduplication-header") do
-      key when not is_nil(key) -> case Cache.insert(cache, key, ttl) do
-                                    {:ok, :exists} -> true
-                                    {:ok, :inserted} -> false
-                                  end
-      nil -> false
     end
   end
 
@@ -110,9 +93,6 @@ defmodule RabbitMQMessageDeduplication.Common do
     end
   end
 
-  @doc """
-  Retrieve
-  """
   def cache_wait_time() do
     Application.get_env(appname(), :cache_wait_time, Timer.seconds(30))
   end
