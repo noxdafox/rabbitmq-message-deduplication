@@ -21,11 +21,11 @@ defmodule RabbitMQMessageDeduplication.PolicyEvent do
   attribute, the module will apply the policy to all queues matching it.
   """
 
+  require Logger
   require RabbitMQMessageDeduplication.Queue
 
   alias :amqqueue, as: AMQQueue
   alias :gen_event, as: GenEvent
-  alias :rabbit_log, as: RabbitLog
   alias :rabbit_policy, as: RabbitPolicy
   alias :rabbit_amqqueue, as: RabbitQueue
   alias RabbitMQMessageDeduplication.Queue, as: DedupQueue
@@ -81,7 +81,7 @@ defmodule RabbitMQMessageDeduplication.PolicyEvent do
     {:ok, queue} = RabbitQueue.lookup(policy[:name])
     queue = RabbitPolicy.set(queue)
 
-    RabbitLog.debug("Policy change for queue ~p~n", [policy[:name]])
+    Logger.debug("Policy change for queue #{inspect(policy[:name])}")
 
     AMQQueue.get_pid(queue)
     |> RabbitQueue.run_backing_queue(DedupQueue,
