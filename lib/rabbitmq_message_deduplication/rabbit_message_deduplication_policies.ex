@@ -52,22 +52,22 @@ defmodule RabbitMQMessageDeduplication.Policies do
   defp policy_validator(<<"x-message-deduplication">>, true), do: :ok
   defp policy_validator(<<"x-message-deduplication">>, false), do: :ok
   defp policy_validator(<<"x-message-deduplication">>, val) do
-    {:error, '\"x-message-deduplication\" must be a boolean, got ~tp', [val]}
+    {:error, "\"x-message-deduplication\" must be a boolean, got ~tp", [val]}
   end
 
   defp policy_validator(<<"x-cache-size">>, val) when is_integer(val) and val > 0, do: :ok
   defp policy_validator(<<"x-cache-size">>, val) do
-    {:error, '\"x-cache-size\" must be an integer greater than 0, got ~tp', [val]}
+    {:error, "\"x-cache-size\" must be an integer greater than 0, got ~tp", [val]}
   end
 
   defp policy_validator(<<"x-cache-ttl">>, val) when is_integer(val) and val > 0, do: :ok
   defp policy_validator(<<"x-cache-ttl">>, val) do
-    {:error, '\"x-cache-ttl\" must be an integer greater than 0, got ~tp', [val]}
+    {:error, "\"x-cache-ttl\" must be an integer greater than 0, got ~tp", [val]}
   end
 
   defp policy_validator(<<"x-cache-persistence">>, "disk"), do: :ok
   defp policy_validator(<<"x-cache-persistence">>, "memory"), do: :ok
   defp policy_validator(<<"x-cache-persistence">>, val) do
-    {:error, '\"x-cache-persistence\" must be either \"disk\" or \"memory\", got ~tp', [val]}
+    {:error, "\"x-cache-persistence\" must be either \"disk\" or \"memory\", got ~tp", [val]}
   end
 end
