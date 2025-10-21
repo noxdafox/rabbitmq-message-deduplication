@@ -24,12 +24,12 @@ defmodule RabbitMQMessageDeduplication.Queue do
 
   import Record, only: [defrecord: 2]
 
+  require Logger
   require RabbitMQMessageDeduplication.Cache
   require RabbitMQMessageDeduplication.Common
 
   alias :mc, as: MC
   alias :amqqueue, as: AMQQueue
-  alias :rabbit_log, as: RabbitLog
   alias :rabbit_amqqueue, as: RabbitQueue
   alias RabbitMQMessageDeduplication.Common, as: Common
   alias RabbitMQMessageDeduplication.Cache, as: Cache
@@ -107,8 +107,7 @@ defmodule RabbitMQMessageDeduplication.Queue do
     case Application.get_env(:rabbit, :backing_queue_module) do
       __MODULE__ -> :ok
       backing_queue ->
-        RabbitLog.info(
-          "Deduplication queues enabled, real BQ is ~s~n", [backing_queue])
+        Logger.info("Deduplication queues enabled, real BQ is #{backing_queue}")
         Application.put_env(__MODULE__, :backing_queue_module, backing_queue)
         Application.put_env(:rabbit, :backing_queue_module, __MODULE__)
         maybe_reconfigure_caches()
@@ -126,8 +125,7 @@ defmodule RabbitMQMessageDeduplication.Queue do
     case Application.get_env(:rabbit, :backing_queue_module) do
       __MODULE__ ->
         backing_queue = Application.get_env(__MODULE__, :backing_queue_module)
-        RabbitLog.info(
-          "Deduplication queues disabled, real BQ is ~s~n", [backing_queue])
+        Logger.info("Deduplication queues disabled, real BQ is #{backing_queue}")
         Application.put_env(:rabbit, :backing_queue_module, backing_queue)
       _ -> :ok
     end
@@ -523,7 +521,7 @@ defmodule RabbitMQMessageDeduplication.Queue do
 
   # Caches created prior to v0.6.0 need to be reconfigured.
   defp maybe_reconfigure_caches() do
-    RabbitLog.debug("Deduplication Queues startup, reconfiguring old caches~n")
+    Logger.debug("Deduplication Queues startup, reconfiguring old caches")
 
     RabbitQueue.list()
     |> Enum.filter(&dedup_arg?/1)
@@ -540,9 +538,8 @@ defmodule RabbitMQMessageDeduplication.Queue do
       |> Common.rabbit_argument("x-message-ttl", type: :number)
     options = [ttl: ttl, persistence: :memory]
 
-    RabbitLog.debug(
-      "Starting queue deduplication cache ~s with options ~p~n",
-      [cache, options])
+    Logger.debug("Starting queue deduplication cache #{cache} " <>
+      "with options #{inspect(options)}")
 
     case CacheManager.create(cache, false, options) do
       :ok -> Cache.flush(cache)
@@ -555,7 +552,7 @@ defmodule RabbitMQMessageDeduplication.Queue do
   defp delete_cache(queue) do
     cache = queue |> AMQQueue.get_name() |> Common.cache_name()
 
-    RabbitLog.debug("Deleting queue deduplication cache ~s~n", [cache])
+    Logger.debug("Deleting queue deduplication cache #{cache}")
 
     CacheManager.destroy(cache)
   end
