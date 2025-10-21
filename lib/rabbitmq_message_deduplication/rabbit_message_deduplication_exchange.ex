@@ -24,10 +24,10 @@ defmodule RabbitMQMessageDeduplication.Exchange do
 
   import Record, only: [defrecord: 2, extract: 2]
 
+  require Logger
   require RabbitMQMessageDeduplication.Cache
   require RabbitMQMessageDeduplication.Common
 
-  alias :rabbit_log, as: RabbitLog
   alias :rabbit_misc, as: RabbitMisc
   alias :rabbit_policy, as: RabbitPolicy
   alias :rabbit_router, as: RabbitRouter
@@ -149,9 +149,8 @@ defmodule RabbitMQMessageDeduplication.Exchange do
     cache = Common.cache_name(name)
     options = format_options(args)
 
-    RabbitLog.debug(
-      "Starting exchange deduplication cache ~s with options ~p~n",
-      [cache, options])
+    Logger.debug("Starting exchange deduplication cache #{cache} " <>
+      "with options #{inspect(options)}")
 
     CacheManager.create(cache, true, options)
   end
@@ -167,9 +166,9 @@ defmodule RabbitMQMessageDeduplication.Exchange do
   def policy_changed(_ex, exchange(name: name, arguments: args, policy: :undefined)) do
     cache = Common.cache_name(name)
 
-    RabbitLog.debug(
-      "All policies for exchange ~p were deleted, resetting to defaults ~p ~n",
-      [name, format_options(args)])
+    Logger.debug(
+      "All policies for exchange #{inspect(name)} were deleted," <>
+      " resetting to defaults #{args |> format_options() |> inspect()}")
 
     reset_arguments(cache, args)
   end
@@ -178,8 +177,8 @@ defmodule RabbitMQMessageDeduplication.Exchange do
   def policy_changed(_ex, exch = exchange(name: name, arguments: args, policy: policy)) do
     cache = Common.cache_name(name)
 
-    RabbitLog.debug("Applying ~s policy to exchange ~p ~n",
-      [RabbitPolicy.name(exch), name])
+    Logger.debug("Applying #{RabbitPolicy.name(exch)} " <>
+      "policy to exchange #{inspect(name)}")
 
     # We need to remove old policy before applying new one
     reset_arguments(cache, args)
@@ -254,7 +253,7 @@ defmodule RabbitMQMessageDeduplication.Exchange do
 
   # Caches created prior to v0.6.0 need to be reconfigured.
   defp maybe_reconfigure_caches() do
-    RabbitLog.debug("Deduplication Exchanges startup, reconfiguring old caches")
+    Logger.debug("Deduplication Exchanges startup, reconfiguring old caches")
 
     RabbitExchange.list()
     |> Enum.filter(fn(exchange(name: type)) -> type == @exchange_type end)
