@@ -16,7 +16,6 @@ defmodule RabbitMQMessageDeduplication.Common do
 
   alias :mc, as: MC
   alias :timer, as: Timer
-  alias RabbitMQMessageDeduplication.Cache, as: Cache
 
   @default_arguments %{type: nil, default: nil}
 
