@@ -167,8 +167,8 @@ defmodule RabbitMQMessageDeduplication.Exchange do
     cache = Common.cache_name(name)
 
     Logger.debug(
-      "All policies for exchange #{inspect(name)} were deleted," <>
-      " resetting to defaults #{args |> format_options() |> inspect()}")
+      "All policies for exchange #{inspect(name)} were deleted, " <>
+      "resetting to defaults #{args |> format_options() |> inspect()}")
 
     reset_arguments(cache, args)
   end
