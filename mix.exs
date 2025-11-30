@@ -20,7 +20,7 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.Mixfile do
       mod: {RabbitMQMessageDeduplication, []},
       registered: [RabbitMQMessageDeduplication],
       broker_version_requirements: if Mix.env == :prod do
-        ["3.13.0", "4.0.0", "4.1.0"]
+        ["3.13.0", "4.0.0", "4.1.0", "4.2.0"]
       else
         []
       end
