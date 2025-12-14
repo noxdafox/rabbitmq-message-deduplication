@@ -16,7 +16,7 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.Mixfile do
   def application() do
     [
       # The Application needs to depend on `rabbit` in order to be detected as a plugin.
-      extra_applications: [:mnesia, :rabbit],
+      extra_applications: [:logger, :mnesia, :rabbit],
       mod: {RabbitMQMessageDeduplication, []},
       registered: [RabbitMQMessageDeduplication],
       broker_version_requirements: if Mix.env == :prod do
