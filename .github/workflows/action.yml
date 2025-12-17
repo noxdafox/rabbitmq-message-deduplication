@@ -13,7 +13,7 @@ jobs:
           - { RMQREF: "v4.0.x", ERLVER: "26.2", ELXVER: "1.16" }
           - { RMQREF: "v4.1.x", ERLVER: "27", ELXVER: "1.18" }
           - { RMQREF: "v4.2.x", ERLVER: "27", ELXVER: "1.18" }
-          # - { RMQREF: "main", ERLVER: "27", ELXVER: "1.18" }
+          - { RMQREF: "main", ERLVER: "27", ELXVER: "1.18" }
     name: "Broker: ${{ matrix.PLATFORM.RMQREF }} - Erlang: ${{ matrix.PLATFORM.ERLVER }} - Elixir: ${{ matrix.PLATFORM.ELXVER }}"
     steps:
       - name: Checkout RabbitMQ Server

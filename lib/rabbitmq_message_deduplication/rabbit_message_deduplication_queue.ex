@@ -324,30 +324,48 @@ defmodule RabbitMQMessageDeduplication.Queue do
   end
 
   @impl :rabbit_backing_queue
-  def requeue(acks = [dqack() | _], state = dqstate(queue_state: qs)) do
-    acks = Enum.map(acks, fn(dqack(tag: ack_tag)) -> ack_tag end)
-
-    passthrough2(state, do: requeue(acks, qs))
+  def requeue(acks, delstate, state = dqstate(queue_state: qs)) do
+    acks = case acks do
+             [dqack() | _] -> acks |> Enum.map(fn(dqack(tag: tag)) -> tag end)
+             _ -> acks
+           end
+    passthrough2(state, do: requeue(acks, delstate, qs))
   end
 
   @impl :rabbit_backing_queue
   def requeue(acks, state = dqstate(queue_state: qs)) do
+    acks = case acks do
+             [dqack() | _] -> acks |> Enum.map(fn(dqack(tag: tag)) -> tag end)
+             _ -> acks
+           end
     passthrough2(state, do: requeue(acks, qs))
   end
 
   @impl :rabbit_backing_queue
-  def ackfold(function, acc, state, acks = [dqack() | _]) do
+  def ackfold(function, acc, state, acks, delfailed) do
     dqstate(queue: queue, queue_state: qs) = state
-    acks = Enum.map(acks, fn(dqack(tag: ack_tag, header: header)) ->
-                            maybe_delete_cache_entry(queue, header)
-                            ack_tag
-                          end)
+    acks = case acks do
+      [dqack() | _] -> acks |> Enum.map(fn(dqack(tag: ack_tag, header: header)) ->
+                                          maybe_delete_cache_entry(queue, header)
+                                          ack_tag
+                                        end)
+      _ -> acks
+    end
 
-    passthrough2(state, do: ackfold(function, acc, qs, acks))
+    passthrough2(state, do: ackfold(function, acc, qs, acks, delfailed))
   end
 
   @impl :rabbit_backing_queue
-  def ackfold(function, acc, state = dqstate(queue_state: qs), acks) do
+  def ackfold(function, acc, state, acks) do
+    dqstate(queue: queue, queue_state: qs) = state
+    acks = case acks do
+      [dqack() | _] -> acks |> Enum.map(fn(dqack(tag: ack_tag, header: header)) ->
+                                          maybe_delete_cache_entry(queue, header)
+                                          ack_tag
+                                        end)
+      _ -> acks
+    end
+
     passthrough2(state, do: ackfold(function, acc, qs, acks))
   end
 
