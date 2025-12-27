@@ -54,4 +54,5 @@ jobs:
           name: plugins-rmq${{ matrix.PLATFORM.RMQREF }}-erl${{ matrix.PLATFORM.ERLVER }}-elx${{ matrix.PLATFORM.ELXVER }}
           path: |
             ${{ env.PLUGIN_FOLDER }}/plugins/elixir-${{ matrix.PLATFORM.ELXVER }}.*.ez
+            ${{ env.PLUGIN_FOLDER }}/plugins/logger-${{ matrix.PLATFORM.ELXVER }}.*.ez
             ${{ env.PLUGIN_FOLDER }}/plugins/rabbitmq_message_deduplication-[0-9].*.ez
