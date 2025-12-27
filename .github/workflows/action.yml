@@ -43,6 +43,7 @@ jobs:
           make dist RABBITMQ_VERSION=${{ matrix.PLATFORM.RMQREF }} MIX_ENV=prod DIST_AS_EZS=yes
       - name: Store test artifacts
         uses: actions/upload-artifact@v4
+        if: "${{ matrix.PLATFORM.RMQREF != 'v3.13.x' }}"
         with:
           name: tests-rmq${{ matrix.PLATFORM.RMQREF }}-erl${{ matrix.PLATFORM.ERLVER }}-elx${{ matrix.PLATFORM.ELXVER }}
           path: ${{ env.SERVER_FOLDER }}/logs/
