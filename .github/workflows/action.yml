@@ -9,7 +9,7 @@ jobs:
     strategy:
       matrix:
         PLATFORM:
-          # - { RMQREF: "v3.13.x", ERLVER: "26.2", ELXVER: "1.16" }
+          - { RMQREF: "v3.13.x", ERLVER: "26.2", ELXVER: "1.16" }
           - { RMQREF: "v4.0.x", ERLVER: "26.2", ELXVER: "1.16" }
           - { RMQREF: "v4.1.x", ERLVER: "27", ELXVER: "1.18" }
           - { RMQREF: "v4.2.x", ERLVER: "27", ELXVER: "1.18" }
@@ -33,6 +33,7 @@ jobs:
           elixir-version: ${{ matrix.PLATFORM.ELXVER }}
       - name: Run tests
         working-directory: ${{ env.PLUGIN_FOLDER }}
+        if: "${{ matrix.PLATFORM.RMQREF != 'v3.13.x' }}"
         run: |
           # We use `dev` Mix environment since old versions of RMQ fail to build otherwise
           make tests RABBITMQ_VERSION=${{ matrix.PLATFORM.RMQREF }} MIX_ENV=dev
