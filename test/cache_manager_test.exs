@@ -26,11 +26,13 @@ defmodule RabbitMQMessageDeduplication.CacheManager.Test do
     options = [distributed: false, persistence: :disk]
 
     CacheManager.create(:cache, options)
+    :disc_copies = Mnesia.table_info(:cache, :storage_type)
     CacheManager.destroy(:cache)
 
     options = [distributed: false, persistence: :memory]
 
     CacheManager.create(:cache, options)
+    :ram_copies = Mnesia.table_info(:cache, :storage_type)
     CacheManager.destroy(:cache)
   end
 

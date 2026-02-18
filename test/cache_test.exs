@@ -44,6 +44,20 @@ defmodule RabbitMQMessageDeduplication.Cache.Test do
     %{cache: cache, cache_ttl: cache_ttl, cache_simple: cache_simple}
   end
 
+  test "cache creation",
+    %{cache: cache, cache_ttl: cache_ttl, cache_simple: _} do
+    seconds = Timer.seconds(1)
+
+    :disc_copies = Mnesia.table_info(cache, :storage_type)
+    {:size, 1} = Mnesia.read_table_property(cache, :size)
+    {:distributed, true} = Mnesia.read_table_property(cache, :distributed)
+
+    :ram_copies = Mnesia.table_info(cache_ttl, :storage_type)
+    {:size, 1} = Mnesia.read_table_property(cache_ttl, :size)
+    {:ttl, seconds} = Mnesia.read_table_property(cache_ttl, :ttl)
+    {:distributed, false} = Mnesia.read_table_property(cache_ttl, :distributed)
+  end
+
   test "basic insertion",
       %{cache: cache, cache_ttl: _, cache_simple: _} do
     {:ok, :inserted} = Cache.insert(cache, "foo")
