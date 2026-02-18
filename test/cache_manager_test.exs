@@ -23,26 +23,30 @@ defmodule RabbitMQMessageDeduplication.CacheManager.Test do
   end
 
   test "cache creation", %{} do
-    options = [persistence: :memory]
+    options = [distributed: false, persistence: :disk]
 
-    CacheManager.create(:cache, true, options)
-    {:atomic, [:cache]} = Mnesia.transaction(fn -> Mnesia.all_keys(caches()) end)
+    CacheManager.create(:cache, options)
+    CacheManager.destroy(:cache)
+
+    options = [distributed: false, persistence: :memory]
+
+    CacheManager.create(:cache, options)
     CacheManager.destroy(:cache)
   end
 
   test "cache deletion", %{} do
-    options = [persistence: :memory]
+    options = [distributed: false, persistence: :memory]
 
-    :ok = CacheManager.create(:cache, false, options)
+    :ok = CacheManager.create(:cache, options)
     {:atomic, [:cache]} = Mnesia.transaction(fn -> Mnesia.all_keys(caches()) end)
     :ok = CacheManager.destroy(:cache)
     {:atomic, []} = Mnesia.transaction(fn -> Mnesia.all_keys(caches()) end)
   end
 
   test "cache cleanup routine", %{} do
-    options = [persistence: :memory]
+    options = [distributed: false, persistence: :memory]
 
-    :ok = CacheManager.create(:cache, true, options)
+    :ok = CacheManager.create(:cache, options)
 
     {:ok, :inserted} = Cache.insert(:cache, "foo", 1000)
 
