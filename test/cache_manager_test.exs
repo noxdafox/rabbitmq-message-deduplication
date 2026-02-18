@@ -13,11 +13,28 @@ defmodule RabbitMQMessageDeduplication.CacheManager.Test do
   alias RabbitMQMessageDeduplication.Cache, as: Cache
   alias RabbitMQMessageDeduplication.CacheManager, as: CacheManager
 
+  # Run Mnesia functions handling output
+  defmacro mnesia_wrap(function) do
+    quote do
+      case unquote(function) do
+        :ok -> :ok
+        :stopped -> :ok
+        {:error, {_, {:already_exists, _}}} -> :ok
+        error -> error
+      end
+    end
+  end
+
   setup do
     start_supervised!(%{id: :cache_manager,
                         start: {CacheManager,
                                 :start_link,
                                 []}})
+
+    # Since disk tables require persistent schema, we need to re-configure Mnesia
+    :ok = mnesia_wrap(Mnesia.stop())
+    :ok = mnesia_wrap(Mnesia.create_schema([Node.self()]))
+    :ok = mnesia_wrap(Mnesia.start())
 
     %{}
   end
@@ -61,4 +78,5 @@ defmodule RabbitMQMessageDeduplication.CacheManager.Test do
   end
 
   def caches(), do: :message_deduplication_caches
+  def cluster_nodes_stub(), do: []
 end
