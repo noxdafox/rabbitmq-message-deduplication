@@ -554,12 +554,12 @@ defmodule RabbitMQMessageDeduplication.Queue do
     ttl = queue
       |> AMQQueue.get_arguments()
       |> Common.rabbit_argument("x-message-ttl", type: :number)
-    options = [ttl: ttl, persistence: :memory]
+    options = [distributed: false, ttl: ttl, persistence: :memory]
 
     Logger.debug("Starting queue deduplication cache #{cache} " <>
       "with options #{inspect(options)}")
 
-    case CacheManager.create(cache, false, options) do
+    case CacheManager.create(cache, options) do
       :ok -> Cache.flush(cache)
       {:error, {:already_exists, ^cache}} -> Cache.flush(cache)
       error -> error

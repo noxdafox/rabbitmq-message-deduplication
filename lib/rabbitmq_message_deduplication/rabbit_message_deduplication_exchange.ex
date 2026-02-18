@@ -152,7 +152,7 @@ defmodule RabbitMQMessageDeduplication.Exchange do
     Logger.debug("Starting exchange deduplication cache #{cache} " <>
       "with options #{inspect(options)}")
 
-    CacheManager.create(cache, true, options)
+    CacheManager.create(cache, options)
   end
 
   @impl :rabbit_exchange_type
@@ -236,7 +236,8 @@ defmodule RabbitMQMessageDeduplication.Exchange do
 
   # Format arguments into options
   defp format_options(args) do
-    [size: Common.rabbit_argument(
+    [distributed: true,
+     size: Common.rabbit_argument(
         args, "x-cache-size", type: :number),
      ttl: Common.rabbit_argument(
        args, "x-cache-ttl", type: :number),

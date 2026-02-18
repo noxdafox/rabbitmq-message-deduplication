@@ -25,15 +25,10 @@ defmodule RabbitMQMessageDeduplication.Cache do
 
   @doc """
   Create a new cache with the given name and options.
-
-  A distributed cache is replicated across multiple nodes.
-
   """
-  @spec create(atom, boolean, list) :: :ok | { :error, any }
-  def create(cache, distributed, options) do
-    Mnesia.start()
-
-    case cache_create(cache, distributed, options) do
+  @spec create(atom, list) :: :ok | { :error, any }
+  def create(cache, options) do
+    case cache_create(cache, options) do
       {_, reason} -> {:error, reason}
       result -> result
     end
@@ -177,12 +172,16 @@ defmodule RabbitMQMessageDeduplication.Cache do
   ## Utility functions
 
   # Mnesia cache table creation.
-  defp cache_create(cache, distributed, options) do
+  defp cache_create(cache, options) do
+    distributed = Keyword.get(options, :distributed)
     persistence = case Keyword.get(options, :persistence) do
                     :disk -> :disc_copies
                     :memory -> :ram_copies
                   end
-    replicas = if distributed, do: cache_replicas(), else: [Node.self()]
+    replicas = case distributed do
+                 true -> cache_replicas([Node.self()])
+                 false -> [Node.self()]
+               end
     options = [{:attributes, [:entry, :expiration]},
                {persistence, replicas},
                {:index, [:expiration]},
