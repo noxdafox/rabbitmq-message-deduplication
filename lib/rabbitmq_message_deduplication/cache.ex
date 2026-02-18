@@ -273,9 +273,9 @@ defmodule RabbitMQMessageDeduplication.Cache do
 
   # List the nodes on which to create the cache replicas.
   # Distributed caches are replicated on two-thirds of the cluster nodes.
-  defp cache_replicas(cache_nodes \\ []) do
+  defp cache_replicas(cache_nodes) do
     cluster_nodes = Mnesia.system_info(:running_db_nodes)
-    replica_number = floor((length(cluster_nodes) * 2) / 3)
+    replica_number = max(1, floor((length(cluster_nodes) * 2) / 3))
 
     Enum.take(cache_nodes ++ (cluster_nodes -- cache_nodes), replica_number)
   end
