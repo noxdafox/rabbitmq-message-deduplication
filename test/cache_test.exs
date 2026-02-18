@@ -68,7 +68,7 @@ defmodule RabbitMQMessageDeduplication.Cache.Test do
 
     :ram_copies = Mnesia.table_info(cache_ttl, :storage_type)
     {:size, 1} = Mnesia.read_table_property(cache_ttl, :size)
-    {:ttl, seconds} = Mnesia.read_table_property(cache_ttl, :ttl)
+    {:ttl, ^seconds} = Mnesia.read_table_property(cache_ttl, :ttl)
     {:distributed, false} = Mnesia.read_table_property(cache_ttl, :distributed)
   end
 
