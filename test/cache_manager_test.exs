@@ -17,24 +17,22 @@ defmodule RabbitMQMessageDeduplication.CacheManager.Test do
   defmacro mnesia_wrap(function) do
     quote do
       case unquote(function) do
-        :ok -> :ok
-        :stopped -> :ok
-        {:error, {_, {:already_exists, _}}} -> :ok
-        error -> error
+        {:atomic, :ok} -> :ok
+        {:aborted, {:already_exists, :schema, _, :disc_copies}} -> :ok
+        result -> result
       end
     end
   end
 
   setup do
+    # Ensure persistent schema for disk caches
+    :ok = Mnesia.start()
+    :ok = mnesia_wrap(Mnesia.change_table_copy_type(:schema, node(), :disc_copies))
+
     start_supervised!(%{id: :cache_manager,
                         start: {CacheManager,
                                 :start_link,
-                                []}})
-
-    # Since disk tables require persistent schema, we need to re-configure Mnesia
-    :ok = mnesia_wrap(Mnesia.stop())
-    :ok = mnesia_wrap(Mnesia.create_schema([Node.self()]))
-    :ok = mnesia_wrap(Mnesia.start())
+                                [[Node.self()]]}})
 
     %{}
   end
@@ -42,15 +40,15 @@ defmodule RabbitMQMessageDeduplication.CacheManager.Test do
   test "cache creation", %{} do
     options = [distributed: false, persistence: :disk]
 
-    CacheManager.create(:cache, options)
+    :ok = CacheManager.create(:cache, options)
     :disc_copies = Mnesia.table_info(:cache, :storage_type)
-    CacheManager.destroy(:cache)
+    :ok = CacheManager.destroy(:cache)
 
     options = [distributed: false, persistence: :memory]
 
-    CacheManager.create(:cache, options)
+    :ok = CacheManager.create(:cache, options)
     :ram_copies = Mnesia.table_info(:cache, :storage_type)
-    CacheManager.destroy(:cache)
+    :ok = CacheManager.destroy(:cache)
   end
 
   test "cache deletion", %{} do

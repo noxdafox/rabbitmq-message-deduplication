@@ -16,10 +16,9 @@ defmodule RabbitMQMessageDeduplication.Cache.Test do
   defmacro mnesia_wrap(function) do
     quote do
       case unquote(function) do
-        :ok -> :ok
-        :stopped -> :ok
-        {:error, {_, {:already_exists, _}}} -> :ok
-        error -> error
+        {:atomic, :ok} -> :ok
+        {:aborted, {:already_exists, :schema, _, :disc_copies}} -> :ok
+        result -> result
       end
     end
   end
@@ -29,10 +28,9 @@ defmodule RabbitMQMessageDeduplication.Cache.Test do
     cache_ttl = :test_cache_ttl
     cache_simple = :cache_simple
 
-    # Since disk tables require persistent schema, we need to re-configure Mnesia
-    :ok = mnesia_wrap(Mnesia.stop())
-    :ok = mnesia_wrap(Mnesia.create_schema([Node.self()]))
-    :ok = mnesia_wrap(Mnesia.start())
+    # Ensure persistent schema for disk caches
+    :ok = Mnesia.start()
+    :ok = mnesia_wrap(Mnesia.change_table_copy_type(:schema, node(), :disc_copies))
 
     on_exit fn ->
       Mnesia.delete_table(cache)
