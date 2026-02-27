@@ -12,6 +12,7 @@ defmodule RabbitMQMessageDeduplication.CacheManager do
 
   use GenServer
 
+  require Logger
   require RabbitMQMessageDeduplication.Cache
 
   alias :timer, as: Timer
@@ -31,8 +32,13 @@ defmodule RabbitMQMessageDeduplication.CacheManager do
      requires: :database,
      enables: :external_infrastructure]}
 
-  def start_link() do
-    GenServer.start_link(__MODULE__, %{}, name: __MODULE__)
+  def start_link(rabbit_nodes \\ []) do
+    cluster_nodes = case rabbit_nodes do
+                    [] -> Common.cluster_nodes()
+                    [_ | _] -> rabbit_nodes
+                  end
+
+    GenServer.start_link(__MODULE__, cluster_nodes, name: __MODULE__)
   end
 
   @doc """
@@ -72,29 +78,19 @@ defmodule RabbitMQMessageDeduplication.CacheManager do
 
   ## Server Callbacks
 
-  # Run Mnesia creation functions handling output
-  defmacro mnesia_create(function) do
-    quote do
-      case unquote(function) do
-        {:atomic, :ok} -> :ok
-        {:aborted, {:already_exists, _}} -> :ok
-        {:aborted, {:already_exists, _, _}} -> :ok
-        error -> error
-      end
-    end
-  end
-
   # Create the cache table and start the cleanup routine.
-  def init(state) do
-    Mnesia.start()
-
-    with :ok <- mnesia_create(Mnesia.create_table(caches(), [])),
-         :ok <- mnesia_create(Mnesia.add_table_copy(caches(), node(), :ram_copies)),
-         :ok <- Mnesia.wait_for_tables([caches()], Common.cache_wait_time()),
-         {:ok, _node} <- Mnesia.subscribe(:system)
+  def init(cluster_nodes) do
+    with :ok <- start_backend(cluster_nodes),
+         :ok <- initialize_schema(),
+         {:ok, _} <- Mnesia.subscribe(:system)
     do
+      nodes = cluster_nodes ++ [node()] |> Enum.dedup()
+
+      Logger.info("Deduplication caches running on nodes: #{inspect(nodes)}")
+
       Process.send_after(__MODULE__, :cleanup, Common.cleanup_period())
-      {:ok, state}
+
+      {:ok, nil}
     else
       {:timeout, reason} -> {:error, reason}
       error -> error
@@ -150,5 +146,47 @@ defmodule RabbitMQMessageDeduplication.CacheManager do
     {:noreply, state}
   end
 
-  def caches(), do: :message_deduplication_caches
+  # Run Mnesia functions handling output
+  defmacro mnesia_wrap(function) do
+    quote do
+      case unquote(function) do
+        {:atomic, :ok} -> :ok
+        {:aborted, {:already_exists, _}} -> :ok        # table already exists
+        {:aborted, {:already_exists, _, _}} -> :ok     # table copy already exists
+        {:aborted, {:already_exists, _, _, _}} -> :ok  # schema already exists
+        error -> error
+      end
+    end
+  end
+
+  # Start Mnesia DB, connect to cluster nodes and create schema
+  defp start_backend(extra_nodes) do
+    with :ok <- Mnesia.start(),
+         {:ok, nodes} <- Mnesia.change_config(:extra_db_nodes, extra_nodes)
+    do
+      case nodes do
+        [_ | _] ->
+          mnesia_wrap(Mnesia.add_table_copy(:schema, node(), :disc_copies))
+          Mnesia.wait_for_tables([:schema], Common.cache_wait_time())
+        [] ->
+          mnesia_wrap(Mnesia.change_table_copy_type(:schema, node(), :disc_copies))
+      end
+    else
+      error -> {:error, error}
+    end
+  end
+
+  # Create supporting tables
+  defp initialize_schema() do
+    with :ok <- mnesia_wrap(Mnesia.create_table(caches(), [])),
+         :ok <- mnesia_wrap(Mnesia.add_table_copy(caches(), node(), :ram_copies)),
+         :ok <- Mnesia.wait_for_tables([caches()], Common.cache_wait_time())
+    do
+      :ok
+    else
+      error -> error
+    end
+  end
+
+  defp caches(), do: :message_deduplication_caches
 end
