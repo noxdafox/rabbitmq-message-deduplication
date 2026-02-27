@@ -16,6 +16,7 @@ defmodule RabbitMQMessageDeduplication.Common do
 
   alias :mc, as: MC
   alias :timer, as: Timer
+  alias :rabbit_nodes, as: RabbitNodes
 
   @default_arguments %{type: nil, default: nil}
 
@@ -82,6 +83,14 @@ defmodule RabbitMQMessageDeduplication.Common do
     queue = sanitize_string(queue)
 
     String.to_atom("cache_queue_#{resource}_#{queue}")
+  end
+
+  @doc """
+  Retrieve the RabbitMQ cluster nodes list excluding the calling node.
+  """
+  @spec cluster_nodes() :: List.t
+  def cluster_nodes() do
+    RabbitNodes.list_running() |> List.delete(node())
   end
 
   def rabbit_keyfind(list, key, default \\ nil) do
