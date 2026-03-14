@@ -101,6 +101,10 @@ defmodule RabbitMQMessageDeduplication.Common do
     end
   end
 
+  def log_interval() do
+    Application.get_env(appname(), :log_interval, Timer.seconds(60))
+  end
+
   def cache_wait_time() do
     Application.get_env(appname(), :cache_wait_time, Timer.seconds(30))
   end

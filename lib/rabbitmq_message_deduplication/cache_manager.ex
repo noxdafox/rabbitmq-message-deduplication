@@ -15,6 +15,7 @@ defmodule RabbitMQMessageDeduplication.CacheManager do
   require Logger
   require RabbitMQMessageDeduplication.Cache
 
+  alias :os, as: OS
   alias :timer, as: Timer
   alias :mnesia, as: Mnesia
   alias RabbitMQMessageDeduplication.Cache, as: Cache
@@ -84,13 +85,9 @@ defmodule RabbitMQMessageDeduplication.CacheManager do
          :ok <- initialize_schema(),
          {:ok, _} <- Mnesia.subscribe(:system)
     do
-      nodes = cluster_nodes ++ [node()] |> Enum.dedup()
+      Process.send_after(__MODULE__, :maintenance, Common.cleanup_period())
 
-      Logger.info("Deduplication caches running on nodes: #{inspect(nodes)}")
-
-      Process.send_after(__MODULE__, :cleanup, Common.cleanup_period())
-
-      {:ok, nil}
+      {:ok, log_status({:last_log, 0})}
     else
       {:timeout, reason} -> {:error, reason}
       error -> error
@@ -126,12 +123,12 @@ defmodule RabbitMQMessageDeduplication.CacheManager do
   end
 
   # The maintenance process deletes expired cache entries.
-  def handle_info(:cleanup, state) do
+  def handle_info(:maintenance, state) do
     {:atomic, caches} = Mnesia.transaction(fn -> Mnesia.all_keys(caches()) end)
     Enum.each(caches, &Cache.delete_expired_entries/1)
-    Process.send_after(__MODULE__, :cleanup, Common.cleanup_period())
+    Process.send_after(__MODULE__, :maintenance, Common.cleanup_period())
 
-    {:noreply, state}
+    {:noreply, log_status(state)}
   end
 
   # On node addition distribute cache tables
@@ -185,6 +182,21 @@ defmodule RabbitMQMessageDeduplication.CacheManager do
       :ok
     else
       error -> error
+    end
+  end
+
+  # Log cache manager status
+  defp log_status({:last_log, last_log}) do
+    now = OS.system_time(:milli_seconds)
+
+    case now - last_log > Common.log_interval() do
+      true -> nodes = Mnesia.system_info(:running_db_nodes)
+              caches = Mnesia.table_info(caches(), :size)
+
+              Logger.debug("##{caches} deduplication caches running on nodes: #{inspect(nodes)}")
+
+              {:last_log, now}
+      false -> {:last_log, last_log}
     end
   end
 
