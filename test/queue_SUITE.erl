@@ -38,9 +38,14 @@ groups() ->
 
 init_per_suite(Config) ->
     rabbit_ct_helpers:log_environment(),
-    Config1 = rabbit_ct_helpers:set_config(Config,
+    %% Remove when transient_nonexcl_queues is removed entirely
+    Config1 = rabbit_ct_helpers:merge_app_env(
+                Config,
+                {rabbit,
+                 [{permit_deprecated_features, #{transient_nonexcl_queues => true}}]}),
+    Config2 = rabbit_ct_helpers:set_config(Config1,
                                            [{rmq_nodename_suffix, ?MODULE}]),
-    rabbit_ct_helpers:run_setup_steps(Config1,
+    rabbit_ct_helpers:run_setup_steps(Config2,
                                       rabbit_ct_broker_helpers:setup_steps() ++
                                       rabbit_ct_client_helpers:setup_steps()).
 
