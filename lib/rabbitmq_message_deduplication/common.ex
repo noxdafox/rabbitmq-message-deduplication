@@ -15,7 +15,6 @@ defmodule RabbitMQMessageDeduplication.Common do
   require RabbitMQMessageDeduplication.Cache
 
   alias :mc, as: MC
-  alias :timer, as: Timer
   alias :rabbit_nodes, as: RabbitNodes
 
   @default_arguments %{type: nil, default: nil}
@@ -102,15 +101,15 @@ defmodule RabbitMQMessageDeduplication.Common do
   end
 
   def log_interval() do
-    Application.get_env(appname(), :log_interval, Timer.seconds(60))
+    Application.fetch_env!(appname(), :log_interval)
   end
 
   def cache_wait_time() do
-    Application.get_env(appname(), :cache_wait_time, Timer.seconds(30))
+    Application.fetch_env!(appname(), :cache_wait_time)
   end
 
   def cleanup_period() do
-    Application.get_env(appname(), :cache_cleanup_period, Timer.seconds(3))
+    Application.fetch_env!(appname(), :cache_cleanup_period)
   end
 
   defp sanitize_string(string) do
