@@ -1,5 +1,13 @@
 PROJECT = rabbitmq_message_deduplication
 
+define PROJECT_ENV
+[
+	{log_interval, 60000},
+	{cache_wait_time, 30000},
+	{cache_cleanup_period, 3000}
+]
+endef
+
 RABBITMQ_VERSION ?= v4.1.x
 current_rmq_ref = $(RABBITMQ_VERSION)
 

@@ -1,5 +1,7 @@
-defmodule RabbitMQ.MessageDeduplicationPlugin.Mixfile do
+defmodule RabbitMQ.MessageDeduplicationPlugin.MixProject do
   use Mix.Project
+
+  alias :timer, as: Timer
 
   def project() do
     [
@@ -19,6 +21,11 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.Mixfile do
       extra_applications: [:logger, :mnesia, :rabbit],
       mod: {RabbitMQMessageDeduplication, []},
       registered: [RabbitMQMessageDeduplication],
+      env: [
+        log_interval: Timer.seconds(60),
+        cache_wait_time: Timer.seconds(30),
+        cache_cleanup_period: Timer.seconds(3)
+      ],
       broker_version_requirements: if Mix.env == :prod do
         ["3.13.0", "4.0.0", "4.1.0", "4.2.0"]
       else
