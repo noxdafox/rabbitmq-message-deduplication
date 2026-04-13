@@ -21,6 +21,8 @@ defmodule RabbitMQMessageDeduplication.CacheManager do
   alias RabbitMQMessageDeduplication.Cache, as: Cache
   alias RabbitMQMessageDeduplication.Common, as: Common
 
+  @caches :message_deduplication_caches
+
   Module.register_attribute(__MODULE__,
     :rabbit_boot_step,
     accumulate: true, persist: true)
@@ -33,11 +35,11 @@ defmodule RabbitMQMessageDeduplication.CacheManager do
      requires: :database,
      enables: :external_infrastructure]}
 
-  def start_link(rabbit_nodes \\ []) do
-    cluster_nodes = case rabbit_nodes do
-                    [] -> Common.cluster_nodes()
-                    [_ | _] -> rabbit_nodes
-                  end
+  def start_link(clustered \\ true) do
+    cluster_nodes = case clustered do
+                      true -> Common.cluster_nodes()
+                      false -> []
+                    end
 
     GenServer.start_link(__MODULE__, cluster_nodes, name: __MODULE__)
   end
@@ -79,24 +81,20 @@ defmodule RabbitMQMessageDeduplication.CacheManager do
 
   ## Server Callbacks
 
-  # Create the cache table and start the cleanup routine.
+  # Initialize Mnesia backend and start maintenance routine
   def init(cluster_nodes) do
-    with :ok <- start_backend(cluster_nodes),
-         :ok <- initialize_schema(),
-         {:ok, _} <- Mnesia.subscribe(:system)
-    do
-      Process.send_after(__MODULE__, :maintenance, Common.cleanup_period())
+    :ok = init_mnesia(cluster_nodes)
 
-      {:ok, log_status({:last_log, 0})}
-    else
-      {:timeout, reason} -> {:error, reason}
-      error -> error
-    end
+    {:ok, _} = Mnesia.subscribe(:system)
+
+    Process.send_after(__MODULE__, :maintenance, Common.cleanup_period())
+
+    {:ok, log_status({:last_log, 0})}
   end
 
   # Create the cache and add it to the Mnesia caches table
   def handle_call({:create, cache, options}, _from, state) do
-    function = fn -> Mnesia.write({caches(), cache, :nil}) end
+    function = fn -> Mnesia.write({@caches, cache, :nil}) end
 
     with :ok <- Cache.create(cache, options),
          {:atomic, result} <- Mnesia.transaction(function)
@@ -110,7 +108,7 @@ defmodule RabbitMQMessageDeduplication.CacheManager do
 
   # Drop the cache and remove it from the Mnesia caches table
   def handle_call({:destroy, cache}, _from, state) do
-    function = fn -> Mnesia.delete({caches(), cache}) end
+    function = fn -> Mnesia.delete({@caches, cache}) end
 
     with :ok <- Cache.drop(cache),
          {:atomic, result} <- Mnesia.transaction(function)
@@ -124,7 +122,7 @@ defmodule RabbitMQMessageDeduplication.CacheManager do
 
   # The maintenance process deletes expired cache entries.
   def handle_info(:maintenance, state) do
-    {:atomic, caches} = Mnesia.transaction(fn -> Mnesia.all_keys(caches()) end)
+    {:atomic, caches} = Mnesia.transaction(fn -> Mnesia.all_keys(@caches) end)
     Enum.each(caches, &Cache.delete_expired_entries/1)
     Process.send_after(__MODULE__, :maintenance, Common.cleanup_period())
 
@@ -132,8 +130,8 @@ defmodule RabbitMQMessageDeduplication.CacheManager do
   end
 
   # On node addition distribute cache tables
-  def handle_info({:mnesia_system_event, {:mnesia_up, _node}}, state) do
-    {:atomic, caches} = Mnesia.transaction(fn -> Mnesia.all_keys(caches()) end)
+  def handle_info({:mnesia_system_event, {:mnesia_up, _}}, state) do
+    {:atomic, caches} = Mnesia.transaction(fn -> Mnesia.all_keys(@caches) end)
     Enum.each(caches, &Cache.rebalance_replicas/1)
 
     {:noreply, state}
@@ -147,6 +145,7 @@ defmodule RabbitMQMessageDeduplication.CacheManager do
   defmacro mnesia_wrap(function) do
     quote do
       case unquote(function) do
+        :yes -> :ok                                    # force load table
         {:atomic, :ok} -> :ok
         {:aborted, {:already_exists, _}} -> :ok        # table already exists
         {:aborted, {:already_exists, _, _}} -> :ok     # table copy already exists
@@ -156,32 +155,58 @@ defmodule RabbitMQMessageDeduplication.CacheManager do
     end
   end
 
-  # Start Mnesia DB, connect to cluster nodes and create schema
-  defp start_backend(extra_nodes) do
-    with :ok <- Mnesia.start(),
-         {:ok, nodes} <- Mnesia.change_config(:extra_db_nodes, extra_nodes)
-    do
-      case nodes do
-        [_ | _] ->
-          mnesia_wrap(Mnesia.add_table_copy(:schema, node(), :disc_copies))
-          Mnesia.wait_for_tables([:schema], Common.cache_wait_time())
-        [] ->
-          mnesia_wrap(Mnesia.change_table_copy_type(:schema, node(), :disc_copies))
-      end
-    else
-      error -> {:error, error}
+  # Initialize Mnesia DB or join existing cluster
+  defp init_mnesia(cluster_nodes) do
+    case cluster_nodes do
+      [] -> init_cluster()
+      [_ | _] -> join_cluster(cluster_nodes)
     end
   end
 
-  # Create supporting tables
-  defp initialize_schema() do
-    with :ok <- mnesia_wrap(Mnesia.create_table(caches(), [])),
-         :ok <- mnesia_wrap(Mnesia.add_table_copy(caches(), node(), :ram_copies)),
-         :ok <- Mnesia.wait_for_tables([caches()], Common.cache_wait_time())
+  # Initialize Mnesia DB
+  defp init_cluster() do
+    Logger.debug("Initializing Mnesia cluster on node #{inspect(node())}")
+
+    with :ok <- Mnesia.start(),
+         :ok <- mnesia_wrap(Mnesia.change_table_copy_type(:schema, node(), :disc_copies)),
+         :ok <- mnesia_wrap(Mnesia.create_table(@caches, [])),
+         :ok <- Mnesia.wait_for_tables([@caches], Common.cache_wait_time())
     do
+      Logger.info("Mnesia cluster initialized on node #{inspect node()}")
+
       :ok
     else
-      error -> error
+      {:timeout, [@caches]} ->
+        Logger.warning("Forcing the load of Mnesia table: #{inspect(@caches)}")
+        mnesia_wrap(Mnesia.force_load_table(@caches))
+      error ->
+        Logger.error("Unable to initialize Mnesia cluster, error: #{inspect(error)}")
+        error
+    end
+  end
+
+  # Join existing Mnesia cluster
+  defp join_cluster(cluster_nodes) do
+    Logger.debug("Joining Mnesia cluster nodes #{inspect(cluster_nodes)}")
+
+    with :stopped <- Mnesia.stop(),
+         :ok <- Mnesia.set_master_nodes(cluster_nodes),
+         :ok <- Mnesia.start(),
+         {:ok, nodes} <- Mnesia.change_config(:extra_db_nodes, cluster_nodes),
+         :ok <- mnesia_wrap(Mnesia.change_table_copy_type(:schema, node(), :disc_copies)),
+         :ok <- mnesia_wrap(Mnesia.add_table_copy(@caches, node(), :ram_copies)),
+         :ok <- Mnesia.wait_for_tables([@caches], Common.cache_wait_time())
+    do
+      Logger.info("Node #{inspect(node())} joined Mnesia cluster #{inspect(nodes)}")
+
+      :ok
+    else
+      {:timeout, [@caches]} ->
+        Logger.warning("Forcing the load of Mnesia table: #{inspect(@caches)}")
+        mnesia_wrap(Mnesia.force_load_table(@caches))
+      error ->
+        Logger.error("Unable to join Mnesia cluster, error: #{inspect(error)}")
+        error
     end
   end
 
@@ -191,7 +216,7 @@ defmodule RabbitMQMessageDeduplication.CacheManager do
 
     case now - last_log > Common.log_interval() do
       true -> nodes = Mnesia.system_info(:running_db_nodes)
-              caches = Mnesia.table_info(caches(), :size)
+              caches = Mnesia.table_info(@caches, :size)
 
               Logger.debug("##{caches} deduplication caches running on nodes: #{inspect(nodes)}")
 
@@ -199,6 +224,4 @@ defmodule RabbitMQMessageDeduplication.CacheManager do
       false -> {:last_log, last_log}
     end
   end
-
-  defp caches(), do: :message_deduplication_caches
 end
