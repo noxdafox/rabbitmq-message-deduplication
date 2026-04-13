@@ -25,14 +25,8 @@ defmodule RabbitMQMessageDeduplication.CacheManager.Test do
   end
 
   setup do
-    # Ensure persistent schema for disk caches
-    :ok = Mnesia.start()
-    :ok = mnesia_wrap(Mnesia.change_table_copy_type(:schema, node(), :disc_copies))
-
     start_supervised!(%{id: :cache_manager,
-                        start: {CacheManager,
-                                :start_link,
-                                [[Node.self()]]}})
+                        start: {CacheManager, :start_link, [false]}})
 
     %{}
   end
