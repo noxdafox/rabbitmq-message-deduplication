@@ -161,13 +161,22 @@ defmodule RabbitMQMessageDeduplication.Cache do
   end
 
   @doc """
-  Change cache options.
+  Get cache option.
   """
-  @spec change_option(atom, atom, any) :: :ok | { :error, any }
-  def change_option(cache, option, value) when option in @options do
+  @spec option(atom, atom) :: any | { :error, any }
+  def option(cache, option) when option in @options do
+    cache_property(cache, option)
+  end
+  def option(_, option), do: {:error, {:invalid, option}}
+
+  @doc """
+  Set cache option.
+  """
+  @spec option(atom, atom, any) :: :ok | { :error, any }
+  def option(cache, option, value) when option in @options do
     :ok = cache_property(cache, option, value)
   end
-  def change_option(_, option, _), do: {:error, {:invalid, option}}
+  def option(_, option, _), do: {:error, {:invalid, option}}
 
   ## Utility functions
 

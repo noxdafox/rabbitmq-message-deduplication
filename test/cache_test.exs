@@ -161,11 +161,11 @@ defmodule RabbitMQMessageDeduplication.Cache.Test do
   end
 
   test "reconfigure the cache", %{cache: cache, cache_ttl: _, cache_simple: _} do
-    :ok = Cache.change_option(cache, :size, 10)
+    :ok = Cache.option(cache, :size, 10)
 
     [entries: _, bytes: _, nodes: _, size: 10] = Cache.info(cache)
 
-    {:error, {:invalid, :wrong_key}} = Cache.change_option(cache, :wrong_key, 10)
+    {:error, {:invalid, :wrong_key}} = Cache.option(cache, :wrong_key, 10)
   end
 
   test "reconfigure old cache on creation", %{cache: cache, cache_ttl: _, cache_simple: _} do

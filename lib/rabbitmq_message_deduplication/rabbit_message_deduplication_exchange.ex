@@ -185,9 +185,9 @@ defmodule RabbitMQMessageDeduplication.Exchange do
 
     for policy_definition <- policy[:definition] do
       case policy_definition do
-        {"x-cache-ttl", value} -> Cache.change_option(cache, :ttl, value)
-        {"x-cache-size", value} -> Cache.change_option(cache, :size, value)
-        {"x-cache-persistence", value} -> Cache.change_option(cache, :persistence, value)
+        {"x-cache-ttl", value} -> Cache.option(cache, :ttl, value)
+        {"x-cache-size", value} -> Cache.option(cache, :size, value)
+        {"x-cache-persistence", value} -> Cache.option(cache, :persistence, value)
       end
     end
   end
@@ -248,7 +248,7 @@ defmodule RabbitMQMessageDeduplication.Exchange do
   # Reconfigure cache to default arguments
   defp reset_arguments(cache, args) do
     for {key, value} <- format_options(args) do
-      Cache.change_option(cache, key, value)
+      Cache.option(cache, key, value)
     end
   end
 
