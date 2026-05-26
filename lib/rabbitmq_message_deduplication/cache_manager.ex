@@ -16,7 +16,9 @@ defmodule RabbitMQMessageDeduplication.CacheManager do
   require RabbitMQMessageDeduplication.Cache
 
   alias :os, as: OS
+  alias :erpc, as: ERPC
   alias :timer, as: Timer
+  alias :global, as: Global
   alias :mnesia, as: Mnesia
   alias RabbitMQMessageDeduplication.Cache, as: Cache
   alias RabbitMQMessageDeduplication.Common, as: Common
@@ -74,7 +76,7 @@ defmodule RabbitMQMessageDeduplication.CacheManager do
   Disable the cache and terminate the manager process.
   """
   def disable() do
-    {:ok, _node} = Mnesia.unsubscribe(:system)
+    {:ok, _} = Mnesia.unsubscribe(:system)
     :ok = Supervisor.terminate_child(:rabbit_sup, __MODULE__)
     :ok = Supervisor.delete_child(:rabbit_sup, __MODULE__)
   end
@@ -137,9 +139,14 @@ defmodule RabbitMQMessageDeduplication.CacheManager do
     {:noreply, state}
   end
 
-  def handle_info({:mnesia_system_event, _event}, state) do
+  # Inconsistent database detected, attempt reconciliation
+  def handle_info({:mnesia_system_event, {:inconsistent_database, _, node}}, state) do
+    Global.trans({__MODULE__, self()}, fn -> attempt_reconciliation(node) end)
+
     {:noreply, state}
   end
+
+  def handle_info({:mnesia_system_event, _event}, state), do: {:noreply, state}
 
   # Run Mnesia functions handling output
   defmacro mnesia_wrap(function) do
@@ -173,8 +180,6 @@ defmodule RabbitMQMessageDeduplication.CacheManager do
          :ok <- Mnesia.wait_for_tables([@caches], Common.cache_wait_time())
     do
       Logger.info("Mnesia cluster initialized on node #{inspect node()}")
-
-      :ok
     else
       {:timeout, [@caches]} ->
         Logger.warning("Forcing the load of Mnesia table: #{inspect(@caches)}")
@@ -189,17 +194,13 @@ defmodule RabbitMQMessageDeduplication.CacheManager do
   defp join_cluster(cluster_nodes) do
     Logger.debug("Joining Mnesia cluster nodes #{inspect(cluster_nodes)}")
 
-    with :stopped <- Mnesia.stop(),
-         :ok <- Mnesia.set_master_nodes(cluster_nodes),
-         :ok <- Mnesia.start(),
+    with :ok = add_cluster_node(node(), cluster_nodes),
          {:ok, nodes} <- Mnesia.change_config(:extra_db_nodes, cluster_nodes),
          :ok <- mnesia_wrap(Mnesia.change_table_copy_type(:schema, node(), :disc_copies)),
          :ok <- mnesia_wrap(Mnesia.add_table_copy(@caches, node(), :ram_copies)),
          :ok <- Mnesia.wait_for_tables([@caches], Common.cache_wait_time())
     do
       Logger.info("Node #{inspect(node())} joined Mnesia cluster #{inspect(nodes)}")
-
-      :ok
     else
       {:timeout, [@caches]} ->
         Logger.warning("Forcing the load of Mnesia table: #{inspect(@caches)}")
@@ -210,7 +211,111 @@ defmodule RabbitMQMessageDeduplication.CacheManager do
     end
   end
 
-  # Log cache manager status
+  # If a network partition is detected, attempt to reconciliate the Mnesia cluster
+  defp attempt_reconciliation(node) do
+    case :running_db_nodes |> Mnesia.system_info() |> Enum.member?(node) do
+      true ->
+        :ok
+      false ->
+        Logger.warning(
+          "Network partition detected, attempting reconciliation on node: #{inspect(node)}")
+
+        split_tables = [@caches | find_split_tables(node)]
+
+        for table <- split_tables do
+          Logger.debug("Attempting reconciliation of table #{inspect(table)}")
+
+          reconciliate_table(table, node)
+        end
+
+        Logger.info(
+          "The following tables have been reconciliated: #{inspect(split_tables)}")
+    end
+  end
+
+  # Add the node to the cluster, this command is executed on the given node.
+  defp add_cluster_node(node, cluster) do
+    with :stopped <- mnesia_rpc_call(node, :stop, []),
+         :ok <- mnesia_rpc_call(node, :set_master_nodes, [cluster]),
+         :ok <- mnesia_rpc_call(node, :start, [])
+    do
+      :ok
+    else
+      error ->
+        Logger.error(
+          "Unable to add #{inspect(node)} to Mnesia cluster, error: #{inspect(error)}")
+        error
+    end
+  end
+
+  defp add_cluster_node(node, cluster, table) do
+    with :stopped <- mnesia_rpc_call(node, :stop, []),
+         :ok <- mnesia_rpc_call(node, :set_master_nodes, [table, cluster]),
+         :ok <- mnesia_rpc_call(node, :start, [])
+    do
+      mnesia_rpc_call(node, :wait_for_tables, [[table], Common.cache_wait_time()])
+    else
+      error ->
+        Logger.error(
+          "Unable to add #{inspect(node)} to Mnesia cluster, error: #{inspect(error)}")
+        error
+    end
+  end
+
+  # Find distributed Mnesia tables located on this node.
+  defp find_split_tables(node) do
+    Mnesia.transaction(fn -> Mnesia.all_keys(@caches) end)
+    |> elem(1)
+    |> Enum.filter(fn(table) -> Cache.option(table, :distributed) end)
+    |> Enum.filter(fn(table) -> node in table_copies(table) end)
+  end
+
+  # List all nodes which have a copy of the given table.
+  defp table_copies(table) do
+    [:ram_copies, :disc_copies]
+    |> Enum.map(fn(type) -> Mnesia.table_info(table, type) end)
+    |> Enum.concat()
+  end
+
+  # Attempt reconciliation by forcing the stranded cluster to join the main one.
+  defp reconciliate_table(table, node) do
+    [master_nodes, split_nodes] = find_cluster_split(node, table)
+
+    Logger.debug(
+      "Master Nodes: #{inspect(master_nodes)} - Split Nodes: #{inspect(split_nodes)}")
+
+    for split_node <- split_nodes do
+      :ok = add_cluster_node(split_node, master_nodes, table)
+    end
+  end
+
+  # Return two lists, master nodes and split nodes based on which group contains
+  # the oldest node.
+  defp find_cluster_split(node, table) do
+    table_nodes = table_copies(table)
+    first_group = Mnesia.system_info(:running_db_nodes)
+      |> Enum.filter(fn(node) -> node in table_nodes end)
+    second_group = mnesia_rpc_call(node, :system_info, [:running_db_nodes])
+      |> Enum.filter(fn(node) -> node in table_nodes end)
+
+    Enum.sort(
+      [first_group, second_group],
+      fn(first, second) -> oldest_group?(first, second, table_nodes) end
+    )
+  end
+
+  # Return true if the oldest node for the given table resides in the first group,
+  # false otherwise.
+  defp oldest_group?(first_group, second_group, table_nodes) do
+    group_nodes = first_group ++ second_group
+    oldest_node = table_nodes
+      |> Enum.reverse()  # We assume Mnesia.table_info returns nodes sorted by creation
+      |> Enum.find(fn(node) -> node in group_nodes end)
+
+    oldest_node in first_group
+  end
+
+  # Log cache manager status.
   defp log_status({:last_log, last_log}) do
     now = OS.system_time(:milli_seconds)
 
@@ -218,10 +323,16 @@ defmodule RabbitMQMessageDeduplication.CacheManager do
       true -> nodes = Mnesia.system_info(:running_db_nodes)
               caches = Mnesia.table_info(@caches, :size)
 
-              Logger.debug("##{caches} deduplication caches running on nodes: #{inspect(nodes)}")
+              Logger.debug(
+                "##{caches} deduplication caches running on nodes: #{inspect(nodes)}")
 
               {:last_log, now}
       false -> {:last_log, last_log}
     end
+  end
+
+  # Execution Mnesia function on given node.
+  defp mnesia_rpc_call(node, function, parameters) do
+    ERPC.call(node, Mnesia, function, parameters, Common.cache_wait_time())
   end
 end
