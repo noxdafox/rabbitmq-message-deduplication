@@ -37,13 +37,13 @@ defmodule RabbitMQMessageDeduplication.CacheManager do
      requires: :database,
      enables: :external_infrastructure]}
 
-  def start_link(clustered \\ true) do
-    cluster_nodes = case clustered do
-                      true -> Common.cluster_nodes()
-                      false -> []
-                    end
+  def start_link(testing \\ false) do
+    init_arg = case testing do
+                 true -> {[], true}
+                 false -> {Common.cluster_nodes(), Common.managed_mnesia()}
+               end
 
-    GenServer.start_link(__MODULE__, cluster_nodes, name: __MODULE__)
+    GenServer.start_link(__MODULE__, init_arg, name: __MODULE__)
   end
 
   @doc """
@@ -84,8 +84,10 @@ defmodule RabbitMQMessageDeduplication.CacheManager do
   ## Server Callbacks
 
   # Initialize Mnesia backend and start maintenance routine
-  def init(cluster_nodes) do
-    :ok = init_mnesia(cluster_nodes)
+  def init({cluster_nodes, init_mnesia}) do
+    if init_mnesia do
+      :ok = init_mnesia(cluster_nodes)
+    end
 
     {:ok, _} = Mnesia.subscribe(:system)
 
@@ -141,7 +143,9 @@ defmodule RabbitMQMessageDeduplication.CacheManager do
 
   # Inconsistent database detected, attempt reconciliation
   def handle_info({:mnesia_system_event, {:inconsistent_database, _, node}}, state) do
-    Global.trans({__MODULE__, self()}, fn -> attempt_reconciliation(node) end)
+    if Common.managed_mnesia() do
+      Global.trans({__MODULE__, self()}, fn -> attempt_reconciliation(node) end)
+    end
 
     {:noreply, state}
   end

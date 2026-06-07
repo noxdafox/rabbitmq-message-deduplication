@@ -26,7 +26,7 @@ defmodule RabbitMQMessageDeduplication.CacheManager.Test do
 
   setup do
     start_supervised!(%{id: :cache_manager,
-                        start: {CacheManager, :start_link, [false]}})
+                        start: {CacheManager, :start_link, [true]}})
 
     %{}
   end

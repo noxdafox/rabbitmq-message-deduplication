@@ -16,6 +16,7 @@ defmodule RabbitMQMessageDeduplication.Common do
 
   alias :mc, as: MC
   alias :rabbit_nodes, as: RabbitNodes
+  alias :rabbit_feature_flags, as: RabbitFeatureFlags
 
   @default_arguments %{type: nil, default: nil}
 
@@ -98,6 +99,13 @@ defmodule RabbitMQMessageDeduplication.Common do
       {_key, value} -> value
       _ -> default
     end
+  end
+
+  @doc """
+  True if Mnesia shall be managed by the plugin. False if it's managed by the broker.
+  """
+  def managed_mnesia() do
+    RabbitFeatureFlags.is_enabled(:khepri_db)
   end
 
   def log_interval() do
