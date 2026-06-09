@@ -124,10 +124,15 @@ defmodule RabbitMQMessageDeduplication.CacheManager do
     end
   end
 
-  # The maintenance process deletes expired cache entries.
+  # Periodic Mnesia maintenance loop
   def handle_info(:maintenance, state) do
+    # Ensure system events subscription persistence
+    Mnesia.subscribe(:system)
+
+    # Remove expired entries from all caches
     {:atomic, caches} = Mnesia.transaction(fn -> Mnesia.all_keys(@caches) end)
     Enum.each(caches, &Cache.delete_expired_entries/1)
+
     Process.send_after(__MODULE__, :maintenance, Common.cleanup_period())
 
     {:noreply, log_status(state)}
@@ -150,7 +155,7 @@ defmodule RabbitMQMessageDeduplication.CacheManager do
     {:noreply, state}
   end
 
-  def handle_info({:mnesia_system_event, _event}, state), do: {:noreply, state}
+  def handle_info({:mnesia_system_event, _}, state), do: {:noreply, state}
 
   # Run Mnesia functions handling output
   defmacro mnesia_wrap(function) do
@@ -228,40 +233,34 @@ defmodule RabbitMQMessageDeduplication.CacheManager do
 
         for table <- split_tables do
           Logger.debug("Attempting reconciliation of table #{inspect(table)}")
-
           reconciliate_table(table, node)
         end
 
-        Logger.info(
-          "The following tables have been reconciliated: #{inspect(split_tables)}")
+        Logger.info("Reconciliated tables: #{inspect(split_tables)}")
     end
   end
 
   # Add the node to the cluster, this command is executed on the given node.
-  defp add_cluster_node(node, cluster) do
+  defp add_cluster_node(node, cluster), do: reset_master_nodes(node, [cluster])
+
+  defp add_cluster_node(node, cluster, table) do
+    case reset_master_nodes(node, [table, cluster]) do
+      :ok -> mnesia_rpc_call(node, :wait_for_tables, [[table], Common.cache_wait_time()])
+      error -> error
+    end
+  end
+
+  # Stop Mnesia, set master nodes and restart.
+  defp reset_master_nodes(node, parameters) do
     with :stopped <- mnesia_rpc_call(node, :stop, []),
-         :ok <- mnesia_rpc_call(node, :set_master_nodes, [cluster]),
-         :ok <- mnesia_rpc_call(node, :start, [])
+         :ok <- mnesia_rpc_call(node, :set_master_nodes, parameters),
+         :ok <- mnesia_rpc_call(node, :start, []),
+         {:ok, ^node} <- mnesia_rpc_call(node, :subscribe, [:system])
     do
       :ok
     else
       error ->
-        Logger.error(
-          "Unable to add #{inspect(node)} to Mnesia cluster, error: #{inspect(error)}")
-        error
-    end
-  end
-
-  defp add_cluster_node(node, cluster, table) do
-    with :stopped <- mnesia_rpc_call(node, :stop, []),
-         :ok <- mnesia_rpc_call(node, :set_master_nodes, [table, cluster]),
-         :ok <- mnesia_rpc_call(node, :start, [])
-    do
-      mnesia_rpc_call(node, :wait_for_tables, [[table], Common.cache_wait_time()])
-    else
-      error ->
-        Logger.error(
-          "Unable to add #{inspect(node)} to Mnesia cluster, error: #{inspect(error)}")
+        Logger.error("Error: #{inspect(error)} adding #{inspect(node)} to Mnesia cluster")
         error
     end
   end
@@ -324,8 +323,8 @@ defmodule RabbitMQMessageDeduplication.CacheManager do
     now = OS.system_time(:milli_seconds)
 
     case now - last_log > Common.log_interval() do
-      true -> nodes = Mnesia.system_info(:running_db_nodes)
-              caches = Mnesia.table_info(@caches, :size)
+      true -> caches = Mnesia.table_info(@caches, :size)
+              nodes = Mnesia.system_info(:running_db_nodes)
 
               Logger.debug(
                 "##{caches} deduplication caches running on nodes: #{inspect(nodes)}")
