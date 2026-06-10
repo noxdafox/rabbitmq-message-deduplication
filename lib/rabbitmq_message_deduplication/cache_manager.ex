@@ -72,28 +72,21 @@ defmodule RabbitMQMessageDeduplication.CacheManager do
     end
   end
 
-  @doc """
-  Disable the cache and terminate the manager process.
-  """
-  def disable() do
-    {:ok, _} = Mnesia.unsubscribe(:system)
-    :ok = Supervisor.terminate_child(:rabbit_sup, __MODULE__)
-    :ok = Supervisor.delete_child(:rabbit_sup, __MODULE__)
-  end
-
   ## Server Callbacks
 
   # Initialize Mnesia backend and start maintenance routine
   def init({cluster_nodes, init_mnesia}) do
-    if init_mnesia do
-      :ok = init_mnesia(cluster_nodes)
-    end
-
+    :ok = if init_mnesia, do: init_mnesia(cluster_nodes)
     {:ok, _} = Mnesia.subscribe(:system)
 
     Process.send_after(__MODULE__, :maintenance, Common.maintenance_period())
 
     {:ok, log_status({:last_log, 0})}
+  end
+
+  def terminate() do
+    {:ok, _} = Mnesia.unsubscribe(:system)
+    :stopped = if Common.managed_mnesia(), do: Mnesia.stop()
   end
 
   # Create the cache and add it to the Mnesia caches table
