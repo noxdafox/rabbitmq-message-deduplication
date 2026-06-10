@@ -24,7 +24,7 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.MixProject do
       env: [
         log_interval: Timer.seconds(60),
         cache_wait_time: Timer.seconds(30),
-        cache_cleanup_period: Timer.seconds(3)
+        cache_maintenance_period: Timer.seconds(3)
       ],
       broker_version_requirements: if Mix.env == :prod do
         ["3.13.0", "4.0.0", "4.1.0", "4.2.0"]

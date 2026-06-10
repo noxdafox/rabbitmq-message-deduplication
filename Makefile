@@ -4,7 +4,7 @@ define PROJECT_ENV
 [
 	{log_interval, 60000},
 	{cache_wait_time, 30000},
-	{cache_cleanup_period, 3000}
+	{cache_maintenance_period, 3000}
 ]
 endef
 

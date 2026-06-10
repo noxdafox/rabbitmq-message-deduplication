@@ -91,7 +91,7 @@ defmodule RabbitMQMessageDeduplication.CacheManager do
 
     {:ok, _} = Mnesia.subscribe(:system)
 
-    Process.send_after(__MODULE__, :maintenance, Common.cleanup_period())
+    Process.send_after(__MODULE__, :maintenance, Common.maintenance_period())
 
     {:ok, log_status({:last_log, 0})}
   end
@@ -133,7 +133,7 @@ defmodule RabbitMQMessageDeduplication.CacheManager do
     {:atomic, caches} = Mnesia.transaction(fn -> Mnesia.all_keys(@caches) end)
     Enum.each(caches, &Cache.delete_expired_entries/1)
 
-    Process.send_after(__MODULE__, :maintenance, Common.cleanup_period())
+    Process.send_after(__MODULE__, :maintenance, Common.maintenance_period())
 
     {:noreply, log_status(state)}
   end
