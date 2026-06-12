@@ -47,6 +47,7 @@ defmodule RabbitMQMessageDeduplication.Exchange do
   @rabbit_boot_step {__MODULE__,
                      [{:description, "exchange type x-message-deduplication"},
                       {:mfa, {__MODULE__, :register, []}},
+                      {:cleanup, {__MODULE__, :unregister, []}},
                       {:requires, :rabbit_registry},
                       {:enables, :kernel_ready}]}
 
