@@ -22,6 +22,7 @@ defmodule RabbitMQMessageDeduplication.CacheManager do
   alias :mnesia, as: Mnesia
   alias RabbitMQMessageDeduplication.Cache, as: Cache
   alias RabbitMQMessageDeduplication.Common, as: Common
+  alias RabbitMQMessageDeduplication.CacheManager, as: CacheManagerState
 
   @caches :message_deduplication_caches
 
@@ -36,6 +37,8 @@ defmodule RabbitMQMessageDeduplication.CacheManager do
      cleanup: {:rabbit_sup, :stop_child, [__MODULE__]},
      requires: :database,
      enables: :external_infrastructure]}
+
+  defstruct last_log: 0, managed_mnesia: true
 
   def start_link(testing \\ false) do
     init_arg = case testing do
@@ -75,13 +78,13 @@ defmodule RabbitMQMessageDeduplication.CacheManager do
   ## Server Callbacks
 
   # Initialize Mnesia backend and start maintenance routine
-  def init({cluster_nodes, init_mnesia}) do
-    :ok = if init_mnesia, do: init_mnesia(cluster_nodes)
+  def init({cluster_nodes, managed_mnesia}) do
+    :ok = if managed_mnesia, do: init_mnesia(cluster_nodes)
     {:ok, _} = Mnesia.subscribe(:system)
 
     Process.send_after(__MODULE__, :maintenance, Common.maintenance_period())
 
-    {:ok, log_status({:last_log, 0})}
+    {:ok, %CacheManagerState{last_log: log_status(0), managed_mnesia: managed_mnesia}}
   end
 
   def terminate() do
@@ -128,7 +131,7 @@ defmodule RabbitMQMessageDeduplication.CacheManager do
 
     Process.send_after(__MODULE__, :maintenance, Common.maintenance_period())
 
-    {:noreply, log_status(state)}
+    {:noreply, %{state | last_log: log_status(state.last_log)}}
   end
 
   # On node addition distribute cache tables
@@ -141,7 +144,7 @@ defmodule RabbitMQMessageDeduplication.CacheManager do
 
   # Inconsistent database detected, attempt reconciliation
   def handle_info({:mnesia_system_event, {:inconsistent_database, _, node}}, state) do
-    if Common.managed_mnesia() do
+    if state.managed_mnesia do
       Global.trans({__MODULE__, self()}, fn -> attempt_reconciliation(node) end)
     end
 
@@ -312,18 +315,18 @@ defmodule RabbitMQMessageDeduplication.CacheManager do
   end
 
   # Log cache manager status.
-  defp log_status({:last_log, last_log}) do
+  defp log_status(timestamp) do
     now = OS.system_time(:milli_seconds)
 
-    case now - last_log > Common.log_interval() do
+    case now - timestamp > Common.log_interval() do
       true -> caches = Mnesia.table_info(@caches, :size)
               nodes = Mnesia.system_info(:running_db_nodes)
 
               Logger.debug(
                 "##{caches} deduplication caches running on nodes: #{inspect(nodes)}")
 
-              {:last_log, now}
-      false -> {:last_log, last_log}
+              now
+      false -> timestamp
     end
   end
 
