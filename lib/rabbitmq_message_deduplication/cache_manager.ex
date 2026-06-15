@@ -82,14 +82,18 @@ defmodule RabbitMQMessageDeduplication.CacheManager do
     :ok = if managed_mnesia, do: init_mnesia(cluster_nodes)
     {:ok, _} = Mnesia.subscribe(:system)
 
+    Process.flag(:trap_exit, true)
     Process.send_after(__MODULE__, :maintenance, Common.maintenance_period())
 
     {:ok, %CacheManagerState{last_log: log_status(0), managed_mnesia: managed_mnesia}}
   end
 
-  def terminate() do
+  def terminate(reason, state) do
+    Logger.debug("Terminating Cache Manager, reason: #{inspect(reason)}")
+
     {:ok, _} = Mnesia.unsubscribe(:system)
-    :stopped = if Common.managed_mnesia(), do: Mnesia.stop()
+    # Stop Mnesia asynchronously to avoid deadlocks during process termination
+    if state.managed_mnesia, do: spawn(fn() -> Mnesia.stop() end)
   end
 
   # Create the cache and add it to the Mnesia caches table
