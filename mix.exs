@@ -22,7 +22,7 @@ defmodule RabbitMQ.MessageDeduplicationPlugin.MixProject do
       mod: {RabbitMQMessageDeduplication, []},
       registered: [RabbitMQMessageDeduplication],
       env: [
-        log_interval: Timer.seconds(60),
+        log_interval: Timer.seconds(90),
         cache_wait_time: Timer.seconds(30),
         cache_maintenance_period: Timer.seconds(3)
       ],
