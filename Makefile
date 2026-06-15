@@ -2,7 +2,7 @@ PROJECT = rabbitmq_message_deduplication
 
 define PROJECT_ENV
 [
-	{log_interval, 60000},
+	{log_interval, 90000},
 	{cache_wait_time, 30000},
 	{cache_maintenance_period, 3000}
 ]
