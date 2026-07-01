@@ -219,6 +219,9 @@ defmodule RabbitMQMessageDeduplication.Exchange do
     []
   end
 
+  @impl :rabbit_exchange_type
+  def recover(_vh, _exs), do: :ok
+
   # Utility functions
 
   # Whether to route the message or not.
