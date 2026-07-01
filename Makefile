@@ -8,7 +8,7 @@ define PROJECT_ENV
 ]
 endef
 
-RABBITMQ_VERSION ?= v4.1.x
+RABBITMQ_VERSION ?= v4.3.x
 current_rmq_ref = $(RABBITMQ_VERSION)
 
 # The Application needs to depend on `rabbit` in order to be detected as a plugin.
