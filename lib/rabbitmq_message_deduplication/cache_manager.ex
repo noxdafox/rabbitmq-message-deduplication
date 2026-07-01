@@ -203,7 +203,9 @@ defmodule RabbitMQMessageDeduplication.CacheManager do
   defp join_cluster(cluster_nodes) do
     Logger.debug("Joining Mnesia cluster nodes #{inspect(cluster_nodes)}")
 
-    with :ok = add_cluster_node(node(), cluster_nodes),
+    with :stopped <- Mnesia.stop(),
+         :ok <- Mnesia.set_master_nodes(cluster_nodes),
+         :ok <- Mnesia.start(),
          {:ok, nodes} <- Mnesia.change_config(:extra_db_nodes, cluster_nodes),
          :ok <- mnesia_wrap(Mnesia.change_table_copy_type(:schema, node(), :disc_copies)),
          :ok <- mnesia_wrap(Mnesia.add_table_copy(@caches, node(), :ram_copies)),
@@ -224,45 +226,53 @@ defmodule RabbitMQMessageDeduplication.CacheManager do
   defp attempt_reconciliation(node) do
     case :running_db_nodes |> Mnesia.system_info() |> Enum.member?(node) do
       true ->
-        :ok
+        Logger.debug("Node #{inspect(node)} already reconciliated with Mnesia cluster")
       false ->
-        Logger.warning(
-          "Network partition detected, attempting reconciliation on node: #{inspect(node)}")
+        Logger.warning("Mnesia partition detected, reconciliating node: #{inspect(node)}")
 
-        split_tables = [@caches | find_split_tables(node)]
+        reconciliations = [@caches | find_split_tables(node)]
+        |> Enum.reduce([], fn(table, acc) -> find_split_nodes(table, node, acc) end)
+        |> Enum.map(&reconciliate_node/1)
 
-        for table <- split_tables do
-          Logger.debug("Attempting reconciliation of table #{inspect(table)}")
-          reconciliate_table(table, node)
-        end
+        nodes = Keyword.keys(reconciliations)
+        tables = reconciliations |> Keyword.values() |> List.flatten() |> Enum.uniq()
 
-        Logger.info("Reconciliated tables: #{inspect(split_tables)}")
+        Logger.info(
+          "Reconciliated Mnesia tables #{inspect(tables)} across nodes: #{inspect(nodes)}")
     end
   end
 
-  # Add the node to the cluster, this command is executed on the given node.
-  defp add_cluster_node(node, cluster), do: reset_master_nodes(node, [cluster])
+  # For the given table, update the split nodes adding each reconciliation instruction
+  # as keyword {table, master nodes}.
+  defp find_split_nodes(table, node, reconciliations) do
+    [master_nodes, split_nodes] = find_cluster_split(node, table)
 
-  defp add_cluster_node(node, cluster, table) do
-    case reset_master_nodes(node, [table, cluster]) do
-      :ok -> mnesia_rpc_call(node, :wait_for_tables, [[table], Common.cache_wait_time()])
-      error -> error
-    end
+    Enum.reduce(
+      split_nodes,
+      reconciliations,
+      fn(split_node, acc) ->
+        Keyword.update(acc,
+          split_node,
+          [{table, master_nodes}],
+          fn(tables) -> [{table, master_nodes} | tables] end
+        )
+      end
+    )
   end
 
-  # Stop Mnesia, set master nodes and restart.
-  defp reset_master_nodes(node, parameters) do
-    with :stopped <- mnesia_rpc_call(node, :stop, []),
-         :ok <- mnesia_rpc_call(node, :set_master_nodes, parameters),
-         :ok <- mnesia_rpc_call(node, :start, []),
-         {:ok, ^node} <- mnesia_rpc_call(node, :subscribe, [:system])
-    do
-      :ok
-    else
-      error ->
-        Logger.error("Error: #{inspect(error)} adding #{inspect(node)} to Mnesia cluster")
-        error
+  # Set master node for all given tables on the given node and restart Mnesia.
+  defp reconciliate_node({node, tables}) do
+    table_names = Enum.map(tables, fn({table, _}) -> table end)
+
+    :stopped = mnesia_rpc_call(node, :stop, [])
+    for {table, master_nodes} <- tables do
+      :ok = mnesia_rpc_call(node, :set_master_nodes, [table, master_nodes])
     end
+    :ok = mnesia_rpc_call(node, :start, [])
+    :ok = mnesia_rpc_call(node, :wait_for_tables, [table_names, Common.cache_wait_time()])
+    {:ok, ^node} = mnesia_rpc_call(node, :subscribe, [:system])
+
+    {node, table_names}
   end
 
   # Find distributed Mnesia tables located on this node.
@@ -273,49 +283,22 @@ defmodule RabbitMQMessageDeduplication.CacheManager do
     |> Enum.filter(fn(table) -> node in table_copies(table) end)
   end
 
+  # Return two lists, master nodes and split nodes based on the longest list
+  defp find_cluster_split(node, table) do
+    table_nodes = table_copies(table)
+    first_group = Mnesia.system_info(:running_db_nodes)
+    |> Enum.filter(fn(node) -> node in table_nodes end)
+    second_group = mnesia_rpc_call(node, :system_info, [:running_db_nodes])
+    |> Enum.filter(fn(node) -> node in table_nodes end)
+
+    Enum.sort_by([first_group, second_group], &length/1, :desc)
+  end
+
   # List all nodes which have a copy of the given table.
   defp table_copies(table) do
     [:ram_copies, :disc_copies]
     |> Enum.map(fn(type) -> Mnesia.table_info(table, type) end)
     |> Enum.concat()
-  end
-
-  # Attempt reconciliation by forcing the stranded cluster to join the main one.
-  defp reconciliate_table(table, node) do
-    [master_nodes, split_nodes] = find_cluster_split(node, table)
-
-    Logger.debug(
-      "Master Nodes: #{inspect(master_nodes)} - Split Nodes: #{inspect(split_nodes)}")
-
-    for split_node <- split_nodes do
-      :ok = add_cluster_node(split_node, master_nodes, table)
-    end
-  end
-
-  # Return two lists, master nodes and split nodes based on which group contains
-  # the oldest node.
-  defp find_cluster_split(node, table) do
-    table_nodes = table_copies(table)
-    first_group = Mnesia.system_info(:running_db_nodes)
-      |> Enum.filter(fn(node) -> node in table_nodes end)
-    second_group = mnesia_rpc_call(node, :system_info, [:running_db_nodes])
-      |> Enum.filter(fn(node) -> node in table_nodes end)
-
-    Enum.sort(
-      [first_group, second_group],
-      fn(first, second) -> oldest_group?(first, second, table_nodes) end
-    )
-  end
-
-  # Return true if the oldest node for the given table resides in the first group,
-  # false otherwise.
-  defp oldest_group?(first_group, second_group, table_nodes) do
-    group_nodes = first_group ++ second_group
-    oldest_node = table_nodes
-      |> Enum.reverse()  # We assume Mnesia.table_info returns nodes sorted by creation
-      |> Enum.find(fn(node) -> node in group_nodes end)
-
-    oldest_node in first_group
   end
 
   # Log cache manager status.
