@@ -71,18 +71,11 @@ defmodule RabbitMQMessageDeduplication.Common do
   the VHost and the exchange/queue name.
   """
   @spec cache_name({:resource, String.t, :exchange | :queue, String.t}) :: atom
-  def cache_name({:resource, resource, :exchange, exchange}) do
-    resource = sanitize_string(resource)
-    exchange = sanitize_string(exchange)
+  def cache_name({:resource, vhost, type, name}) do
+    vhost = sanitize_string(vhost)
+    name = sanitize_string(name)
 
-    String.to_atom("cache_exchange_#{resource}_#{exchange}")
-  end
-
-  def cache_name({:resource, resource, :queue, queue}) do
-    resource = sanitize_string(resource)
-    queue = sanitize_string(queue)
-
-    String.to_atom("cache_queue_#{resource}_#{queue}")
+    String.to_atom("cache_#{type}_#{vhost}_#{name}")
   end
 
   @doc """
