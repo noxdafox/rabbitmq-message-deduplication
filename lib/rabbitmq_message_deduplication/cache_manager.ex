@@ -174,21 +174,21 @@ defmodule RabbitMQMessageDeduplication.CacheManager do
   # Initialize Mnesia DB or join existing cluster
   defp init_mnesia(cluster_nodes) do
     case cluster_nodes do
-      [] -> init_cluster()
-      [_ | _] -> join_cluster(cluster_nodes)
+      [] -> init_cluster(Node.self())
+      [_ | _] -> join_cluster(Node.self(), cluster_nodes)
     end
   end
 
   # Initialize Mnesia DB
-  defp init_cluster() do
-    Logger.debug("Initializing Mnesia cluster on node #{inspect(node())}")
+  defp init_cluster(node) do
+    Logger.debug("Initializing Mnesia cluster on node #{inspect(node)}")
 
     with :ok <- Mnesia.start(),
-         :ok <- mnesia_wrap(Mnesia.change_table_copy_type(:schema, node(), :disc_copies)),
+         :ok <- mnesia_wrap(Mnesia.change_table_copy_type(:schema, node, :disc_copies)),
          :ok <- mnesia_wrap(Mnesia.create_table(@caches, [])),
          :ok <- Mnesia.wait_for_tables([@caches], Common.cache_wait_time())
     do
-      Logger.info("Mnesia cluster initialized on node #{inspect node()}")
+      Logger.info("Mnesia cluster initialized on node #{inspect(node)}")
     else
       {:timeout, [@caches]} ->
         Logger.warning("Forcing the load of Mnesia table: #{inspect(@caches)}")
@@ -200,18 +200,18 @@ defmodule RabbitMQMessageDeduplication.CacheManager do
   end
 
   # Join existing Mnesia cluster
-  defp join_cluster(cluster_nodes) do
+  defp join_cluster(node, cluster_nodes) do
     Logger.debug("Joining Mnesia cluster nodes #{inspect(cluster_nodes)}")
 
     with :stopped <- Mnesia.stop(),
          :ok <- Mnesia.set_master_nodes(cluster_nodes),
          :ok <- Mnesia.start(),
          {:ok, nodes} <- Mnesia.change_config(:extra_db_nodes, cluster_nodes),
-         :ok <- mnesia_wrap(Mnesia.change_table_copy_type(:schema, node(), :disc_copies)),
-         :ok <- mnesia_wrap(Mnesia.add_table_copy(@caches, node(), :ram_copies)),
+         :ok <- mnesia_wrap(Mnesia.change_table_copy_type(:schema, node, :disc_copies)),
+         :ok <- mnesia_wrap(Mnesia.add_table_copy(@caches, node, :ram_copies)),
          :ok <- Mnesia.wait_for_tables([@caches], Common.cache_wait_time())
     do
-      Logger.info("Node #{inspect(node())} joined Mnesia cluster #{inspect(nodes)}")
+      Logger.info("Node #{inspect(node)} joined Mnesia cluster #{inspect(nodes)}")
     else
       {:timeout, [@caches]} ->
         Logger.warning("Forcing the load of Mnesia table: #{inspect(@caches)}")
@@ -230,9 +230,11 @@ defmodule RabbitMQMessageDeduplication.CacheManager do
       false ->
         Logger.warning("Mnesia partition detected, reconciliating node: #{inspect(node)}")
 
-        reconciliations = [@caches | find_split_tables(node)]
-        |> Enum.reduce([], fn(table, acc) -> find_split_nodes(table, node, acc) end)
-        |> Enum.map(&reconciliate_node/1)
+        reconciliations =
+          [@caches | find_split_tables(node) ++ find_split_tables(Node.self())]
+          |> Enum.uniq()
+          |> Enum.reduce([], fn(table, acc) -> find_split_nodes(table, node, acc) end)
+          |> Enum.map(&reconciliate_node/1)
 
         nodes = Keyword.keys(reconciliations)
         tables = reconciliations |> Keyword.values() |> List.flatten() |> Enum.uniq()
