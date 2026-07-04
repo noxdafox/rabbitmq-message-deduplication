@@ -42,6 +42,10 @@ The latest version of the plugin requires RabbitMQ 3.13.0.
 
 Earlier RabbitMQ versions are supported by 0.6.2.
 
+### Upgrading to RabbitMQ 4.3.0
+
+When upgrading to RabbitMQ 4.3.0, make sure to temporarily disable the plugin during the upgrade. Otherwise, the upgrade process will remove the supporting deduplication caches rendering exchanges and queue nonfunctional.
+
 ## Exchange level deduplication
 
 The exchange type `x-message-deduplication` allows to filter message duplicates before any routing rule is applied.
