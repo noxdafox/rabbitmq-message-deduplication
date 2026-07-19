@@ -18,13 +18,13 @@ jobs:
     name: "Broker: ${{ matrix.PLATFORM.RMQREF }} - Erlang: ${{ matrix.PLATFORM.ERLVER }} - Elixir: ${{ matrix.PLATFORM.ELXVER }}"
     steps:
       - name: Checkout RabbitMQ Server
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           repository: rabbitmq/rabbitmq-server
           ref: ${{ matrix.PLATFORM.RMQREF }}
           path: ${{ env.SERVER_FOLDER }}
       - name: Checkout Plugin
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           path: ${{ env.PLUGIN_FOLDER }}
       - name: Install Erlang and Elixir
@@ -43,13 +43,13 @@ jobs:
         run: |
           make dist RABBITMQ_VERSION=${{ matrix.PLATFORM.RMQREF }} MIX_ENV=prod DIST_AS_EZS=yes
       - name: Store test artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         if: "${{ matrix.PLATFORM.RMQREF != 'v3.13.x' }}"
         with:
           name: tests-rmq${{ matrix.PLATFORM.RMQREF }}-erl${{ matrix.PLATFORM.ERLVER }}-elx${{ matrix.PLATFORM.ELXVER }}
           path: ${{ env.SERVER_FOLDER }}/logs/
       - name: Store build artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         if: "${{ matrix.PLATFORM.RMQREF != 'main' }}"
         with:
           name: plugins-rmq${{ matrix.PLATFORM.RMQREF }}-erl${{ matrix.PLATFORM.ERLVER }}-elx${{ matrix.PLATFORM.ELXVER }}
