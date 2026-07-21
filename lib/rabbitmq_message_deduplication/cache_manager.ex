@@ -249,17 +249,12 @@ defmodule RabbitMQMessageDeduplication.CacheManager do
   defp find_split_nodes(table, node, reconciliations) do
     [master_nodes, split_nodes] = find_cluster_split(node, table)
 
-    Enum.reduce(
-      split_nodes,
-      reconciliations,
-      fn(split_node, acc) ->
-        Keyword.update(acc,
-          split_node,
-          [{table, master_nodes}],
-          fn(tables) -> [{table, master_nodes} | tables] end
-        )
-      end
-    )
+    append_table = fn(tables) -> [{table, master_nodes} | tables] end
+    update_reconciliation = fn(split_node, acc) ->
+      Keyword.update(acc, split_node, [{table, master_nodes}], append_table)
+    end
+
+    Enum.reduce(split_nodes, reconciliations, update_reconciliation)
   end
 
   # Set master node for all given tables on the given node and restart Mnesia.
