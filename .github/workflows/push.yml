@@ -6,6 +6,8 @@ env:
 jobs:
   build:
     runs-on: self-hosted
+    env:
+      ImageOS: ubuntu24 # equivalent to runs-on ubuntu-24.04
     strategy:
       matrix:
         PLATFORM:
