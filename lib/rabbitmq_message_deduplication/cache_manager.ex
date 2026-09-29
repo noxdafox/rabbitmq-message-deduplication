@@ -250,7 +250,7 @@ defmodule RabbitMQMessageDeduplication.CacheManager do
   #
   # The cluster wide lock ensures a single node creates the table. Should the
   # lock not be available, the operation is attempted anyway: Mnesia serializes
-  # the schema transaction and the loser is tolerated via `already_exists`.
+  # the schema transaction and the loser adds a copy instead.
   defp setup_caches_table(node, cluster_nodes) do
     lock = {{__MODULE__, @caches}, self()}
     function = fn() -> create_or_copy_caches_table(node) end
@@ -265,9 +265,10 @@ defmodule RabbitMQMessageDeduplication.CacheManager do
   end
 
   defp create_or_copy_caches_table(node) do
-    case Enum.member?(Mnesia.system_info(:tables), @caches) do
-      true -> mnesia_wrap(Mnesia.add_table_copy(@caches, node, :ram_copies))
-      false -> mnesia_wrap(Mnesia.create_table(@caches, []))
+    case Mnesia.create_table(@caches, []) do
+      {:aborted, {:already_exists, @caches}} ->
+        mnesia_wrap(Mnesia.add_table_copy(@caches, node, :ram_copies))
+      result -> mnesia_wrap(result)
     end
   end
 
