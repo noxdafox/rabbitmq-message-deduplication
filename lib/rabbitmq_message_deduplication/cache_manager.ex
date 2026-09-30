@@ -25,7 +25,6 @@ defmodule RabbitMQMessageDeduplication.CacheManager do
   alias RabbitMQMessageDeduplication.CacheManager, as: CacheManagerState
 
   @caches :message_deduplication_caches
-  @lock_retries 10
 
   Module.register_attribute(__MODULE__,
     :rabbit_boot_step,
@@ -183,7 +182,7 @@ defmodule RabbitMQMessageDeduplication.CacheManager do
 
     with :ok <- start_mnesia(cluster_nodes),
          :ok <- mnesia_wrap(Mnesia.change_table_copy_type(:schema, node, :disc_copies)),
-         :ok <- setup_caches_table(node, cluster_nodes),
+         :ok <- setup_caches_table(node),
          :ok <- Mnesia.wait_for_tables([@caches], Common.cache_wait_time())
     do
       Logger.info("Mnesia cluster ready on node #{inspect(node)}, " <>
@@ -246,25 +245,7 @@ defmodule RabbitMQMessageDeduplication.CacheManager do
     end
   end
 
-  # Create the caches table or add a copy of it to this node.
-  #
-  # The cluster wide lock ensures a single node creates the table. Should the
-  # lock not be available, the operation is attempted anyway: Mnesia serializes
-  # the schema transaction and the loser adds a copy instead.
-  defp setup_caches_table(node, cluster_nodes) do
-    lock = {{__MODULE__, @caches}, self()}
-    function = fn() -> create_or_copy_caches_table(node) end
-
-    case Global.trans(lock, function, [node | cluster_nodes], @lock_retries) do
-      :aborted ->
-        Logger.warning("Could not acquire the #{inspect(@caches)} lock, " <>
-                       "setting the table up without it")
-        create_or_copy_caches_table(node)
-      result -> result
-    end
-  end
-
-  defp create_or_copy_caches_table(node) do
+  defp setup_caches_table(node) do
     case Mnesia.create_table(@caches, []) do
       {:aborted, {:already_exists, @caches}} ->
         mnesia_wrap(Mnesia.add_table_copy(@caches, node, :ram_copies))

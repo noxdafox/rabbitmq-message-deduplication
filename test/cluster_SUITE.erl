@@ -12,11 +12,14 @@
 %% orders in which that can happen:
 %%
 %%   * the plugin is enabled while the nodes are already clustered
-%%     (a plugin enabled on a running cluster, or re-enabled after an upgrade);
+%%     (a plugin enabled on a running cluster, or any node restart once the
+%%     `khepri_db` feature flag is enabled);
 %%   * the plugin is enabled on standalone nodes which are clustered afterwards
 %%     (a brand new cluster, or a node added to an existing one).
 %%
 %% Both must end up with a single deduplication cache shared by every node.
+%% The first case is also tested with the plugin enabled on every node at the
+%% same time.
 
 -module(cluster_SUITE).
 
@@ -35,13 +38,15 @@
 all() ->
     [
      {group, plugin_enabled_after_clustering},
-     {group, plugin_enabled_before_clustering}
+     {group, plugin_enabled_before_clustering},
+     {group, plugin_enabled_concurrently}
     ].
 
 groups() ->
     [
      {plugin_enabled_after_clustering, [], [enable_plugin_on_clustered_nodes]},
-     {plugin_enabled_before_clustering, [], [cluster_nodes_with_plugin_enabled]}
+     {plugin_enabled_before_clustering, [], [cluster_nodes_with_plugin_enabled]},
+     {plugin_enabled_concurrently, [], [enable_plugin_concurrently]}
     ].
 
 %% -------------------------------------------------------------------
@@ -59,10 +64,7 @@ end_per_suite(Config) ->
 %% disabled so that the plugin can be enabled at the point each group needs it,
 %% rather than at boot.
 init_per_group(Group, Config) ->
-    Clustered = case Group of
-                    plugin_enabled_after_clustering -> true;
-                    plugin_enabled_before_clustering -> false
-                end,
+    Clustered = Group =/= plugin_enabled_before_clustering,
     Config1 = rabbit_ct_helpers:set_config(
                 Config,
                 [{rmq_nodename_suffix, Group},
@@ -91,7 +93,7 @@ end_per_testcase(Testcase, Config) ->
 
 %% The nodes are clustered first, then the plugin is enabled on each of them.
 %% This is what happens when a user enables the plugin on a running cluster and
-%% when it is re-enabled after a broker upgrade.
+%% when a node restarts once the `khepri_db` feature flag is enabled.
 enable_plugin_on_clustered_nodes(Config) ->
     case khepri_enabled(Config) of
         false ->
@@ -116,6 +118,20 @@ cluster_nodes_with_plugin_enabled(Config) ->
         true ->
             ok = enable_plugin_everywhere(Config),
             ok = cluster_nodes(Config),
+
+            ok = assert_nodes_running(Config),
+            ok = assert_cache_table_everywhere(Config),
+            ok = assert_deduplicates_across_nodes(Config)
+    end.
+
+enable_plugin_concurrently(Config) ->
+    case khepri_enabled(Config) of
+        false ->
+            {skip, "Khepri is not the metadata store on this broker"};
+        true ->
+            ok = assert_clustered(Config),
+
+            ok = enable_plugin_everywhere_concurrently(Config),
 
             ok = assert_nodes_running(Config),
             ok = assert_cache_table_everywhere(Config),
@@ -147,19 +163,23 @@ assert_nodes_running(Config) ->
       end, node_indices()),
     ok.
 
-%% Every node must hold the table the plugin registers its caches in. Without it
-%% the Cache Manager is not running and the deduplication exchanges are dead.
+%% `mnesia:system_info(tables)` also lists tables without a local copy, so the
+%% copies are checked instead.
 assert_cache_table_everywhere(Config) ->
+    Nodes = lists:sort(nodenames(Config)),
     lists:foreach(
       fun(N) ->
-              Tables = rabbit_ct_broker_helpers:rpc(
-                         Config, N, mnesia, system_info, [tables]),
-              ?assert(
-                 lists:member(?CACHES, Tables),
+              DbNodes = rabbit_ct_broker_helpers:rpc(
+                          Config, N, mnesia, system_info, [running_db_nodes]),
+              ?assertEqual(Nodes, lists:sort(DbNodes)),
+              Copies = rabbit_ct_broker_helpers:rpc(
+                         Config, N, mnesia, table_info, [?CACHES, ram_copies]),
+              ?assertEqual(
+                 Nodes, lists:sort(Copies),
                  lists:flatten(
                    io_lib:format(
-                     "node ~b does not have the ~tp table; Mnesia holds ~tp",
-                     [N, ?CACHES, Tables])))
+                     "node ~b does not see a copy of the ~tp table on every node",
+                     [N, ?CACHES])))
       end, node_indices()),
     ok.
 
@@ -197,6 +217,9 @@ assert_clustered(Config) ->
 node_indices() ->
     lists:seq(0, ?NODES - 1).
 
+nodenames(Config) ->
+    rabbit_ct_broker_helpers:get_node_configs(Config, nodename).
+
 enable_plugin_everywhere(Config) ->
     lists:foreach(
       fun(N) ->
@@ -206,6 +229,27 @@ enable_plugin_everywhere(Config) ->
                  lists:flatten(
                    io_lib:format("could not enable the plugin on node ~b", [N])))
       end, node_indices()),
+    ok.
+
+enable_plugin_everywhere_concurrently(Config) ->
+    Self = self(),
+    Pids = [spawn_link(
+              fun() ->
+                      Result = rabbit_ct_broker_helpers:enable_plugin(
+                                 Config, N, ?PLUGIN),
+                      Self ! {self(), N, Result}
+              end) || N <- node_indices()],
+    lists:foreach(
+      fun(Pid) ->
+              receive
+                  {Pid, N, Result} ->
+                      ?assertEqual(
+                         ok, Result,
+                         lists:flatten(
+                           io_lib:format(
+                             "could not enable the plugin on node ~b", [N])))
+              end
+      end, Pids),
     ok.
 
 %% Clustering is done from within the testcase so that a failure is reported as
