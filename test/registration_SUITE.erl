@@ -9,11 +9,14 @@
 
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("common_test/include/ct.hrl").
+-include_lib("amqp_client/include/amqp_client.hrl").
 
 -compile(export_all).
 
+-define(CACHE, cache_exchange__test).
 -define(CACHE_MANAGER, 'Elixir.RabbitMQMessageDeduplication.CacheManager').
 -define(EXCHANGE, 'Elixir.RabbitMQMessageDeduplication.Exchange').
+-define(PLUGIN, rabbitmq_message_deduplication).
 
 all() ->
     [
@@ -23,7 +26,8 @@ all() ->
 groups() ->
     [
      {non_parallel_tests, [], [
-                               cache_manager_precedes_registration
+                               cache_manager_precedes_registration,
+                               reconfigure_caches_at_registration
                               ]}
     ].
 
@@ -55,6 +59,10 @@ init_per_testcase(Testcase, Config) ->
     rabbit_ct_helpers:testcase_started(Config, Testcase).
 
 end_per_testcase(Testcase, Config) ->
+    Exchange = rpc(Config, rabbit_misc, r, [<<"/">>, exchange, <<"test">>]),
+    ok = rpc(Config, rabbit_exchange, ensure_deleted,
+             [Exchange, false, <<"acting-user">>]),
+
     rabbit_ct_helpers:testcase_finished(Config, Testcase).
 
 %% -------------------------------------------------------------------
@@ -69,12 +77,38 @@ cache_manager_precedes_registration(Config) ->
 
     ?assert(position(?CACHE_MANAGER, Steps) < position(?EXCHANGE, Steps)).
 
+%% The plugin brings its own Mnesia backend up empty, so the caches of the
+%% deduplication exchanges which already exist have to be created back when
+%% the exchange type is registered. Caches missing from the caches table are
+%% never visited by the maintenance routine and keep their expired entries.
+reconfigure_caches_at_registration(Config) ->
+    Channel = rabbit_ct_client_helpers:open_channel(Config),
+
+    #'exchange.declare_ok'{} = amqp_channel:call(
+                                 Channel, make_exchange(<<"test">>, 10, 10000)),
+    ?assertEqual([?CACHE], registered_caches(Config)),
+
+    ok = rabbit_ct_broker_helpers:disable_plugin(Config, 0, ?PLUGIN),
+    ok = rabbit_ct_broker_helpers:enable_plugin(Config, 0, ?PLUGIN),
+
+    ?assertEqual([?CACHE], registered_caches(Config)).
+
 %% -------------------------------------------------------------------
 %% Utility functions.
 %% -------------------------------------------------------------------
 
+make_exchange(Ex, Size, TTL) ->
+    #'exchange.declare'{
+       exchange    = Ex,
+       type        = <<"x-message-deduplication">>,
+       arguments   = [{<<"x-cache-size">>, long, Size},
+                      {<<"x-cache-ttl">>, long, TTL}]}.
+
 rpc(Config, Module, Function, Args) ->
     rabbit_ct_broker_helpers:rpc(Config, 0, Module, Function, Args).
+
+registered_caches(Config) ->
+    rpc(Config, ?CACHE_MANAGER, caches, []).
 
 position(Element, List) ->
     position(Element, List, 1).
