@@ -91,8 +91,10 @@ defmodule RabbitMQMessageDeduplication.CacheManager do
   def terminate(reason, state) do
     Logger.debug("Terminating Cache Manager, reason: #{inspect(reason)}")
 
-    {:ok, _} = Mnesia.unsubscribe(:system)
-    # Stop Mnesia asynchronously to avoid deadlocks during process termination
+    # Mnesia might be already stopped when the broker shuts down
+    _ = Mnesia.unsubscribe(:system)
+    # Ensure Mnesia is stopped.
+    # Do it asynchronously to avoid deadlocks during process termination
     if state.managed_mnesia, do: spawn(fn() -> Mnesia.stop() end)
   end
 
