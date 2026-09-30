@@ -48,7 +48,7 @@ defmodule RabbitMQMessageDeduplication.Exchange do
                      [{:description, "exchange type x-message-deduplication"},
                       {:mfa, {__MODULE__, :register, []}},
                       {:cleanup, {__MODULE__, :unregister, []}},
-                      {:requires, :rabbit_registry},
+                      {:requires, [:rabbit_registry, CacheManager]},
                       {:enables, :kernel_ready}]}
 
   defrecord :exchange, extract(
