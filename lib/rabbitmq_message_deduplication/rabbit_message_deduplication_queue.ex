@@ -41,9 +41,22 @@ defmodule RabbitMQMessageDeduplication.Queue do
     :rabbit_boot_step,
     accumulate: true, persist: true)
 
+  # Restore the original backing queue module before any other one runs.
+  #
+  # Backing queue modules form a chain, each storing the module it delegates to.
+  # This module's entry survives `stop_app` followed by `start_app`, as the
+  # broker skips the cleanup steps when it stops. On the next start
+  # `rabbit_priority_queue` would then delegate to this module, which still
+  # delegates back to it: a call would bounce between the two forever.
+  @rabbit_boot_step {:"#{__MODULE__}.restore",
+                     [{:description, "message deduplication queue restore"},
+                      {:mfa, {__MODULE__, :disable, []}},
+                      {:enables, :pre_boot}]}
+
   @rabbit_boot_step {__MODULE__,
                      [{:description, "message deduplication queue"},
                       {:mfa, {__MODULE__, :enable, []}},
+                      {:cleanup, {__MODULE__, :disable, []}},
                       {:requires, :kernel_ready},
                       {:enables, :core_initialized}]}
 

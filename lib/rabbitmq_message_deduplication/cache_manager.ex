@@ -171,24 +171,23 @@ defmodule RabbitMQMessageDeduplication.CacheManager do
     end
   end
 
-  # Initialize Mnesia DB or join existing cluster
+  # Initialize the Mnesia DB, joining the given cluster nodes if any.
+  #
+  # The caches table is set up the same way whether this node is alone or part
+  # of a cluster: the node which gets there first creates it, the others add a
+  # copy of it. Deciding upfront which of the two applies is not possible, as a
+  # node may well be clustered while no node has created the table yet.
   defp init_mnesia(cluster_nodes) do
-    case cluster_nodes do
-      [] -> init_cluster(Node.self())
-      [_ | _] -> join_cluster(Node.self(), cluster_nodes)
-    end
-  end
+    node = Node.self()
 
-  # Initialize Mnesia DB
-  defp init_cluster(node) do
-    Logger.debug("Initializing Mnesia cluster on node #{inspect(node)}")
-
-    with :ok <- Mnesia.start(),
+    with :ok <- start_mnesia(cluster_nodes),
          :ok <- mnesia_wrap(Mnesia.change_table_copy_type(:schema, node, :disc_copies)),
-         :ok <- mnesia_wrap(Mnesia.create_table(@caches, [])),
+         :ok <- setup_caches_table(node),
          :ok <- Mnesia.wait_for_tables([@caches], Common.cache_wait_time())
     do
-      Logger.info("Mnesia cluster initialized on node #{inspect(node)}")
+      Logger.info("Mnesia cluster ready on node #{inspect(node)}, " <>
+                  "nodes: #{inspect(Mnesia.system_info(:running_db_nodes))}")
+      :ok
     else
       {:timeout, [@caches]} ->
         Logger.warning("Forcing the load of Mnesia table: #{inspect(@caches)}")
@@ -199,26 +198,58 @@ defmodule RabbitMQMessageDeduplication.CacheManager do
     end
   end
 
-  # Join existing Mnesia cluster
-  defp join_cluster(node, cluster_nodes) do
+  # Start Mnesia, merging the schema with the given cluster nodes if any
+  defp start_mnesia([]) do
+    Logger.debug("Initializing Mnesia cluster on node #{inspect(Node.self())}")
+
+    Mnesia.start()
+  end
+
+  defp start_mnesia(cluster_nodes) do
     Logger.debug("Joining Mnesia cluster nodes #{inspect(cluster_nodes)}")
 
     with :stopped <- Mnesia.stop(),
          :ok <- Mnesia.set_master_nodes(cluster_nodes),
          :ok <- Mnesia.start(),
-         {:ok, nodes} <- Mnesia.change_config(:extra_db_nodes, cluster_nodes),
-         :ok <- mnesia_wrap(Mnesia.change_table_copy_type(:schema, node, :disc_copies)),
-         :ok <- mnesia_wrap(Mnesia.add_table_copy(@caches, node, :ram_copies)),
-         :ok <- Mnesia.wait_for_tables([@caches], Common.cache_wait_time())
+         {:ok, _nodes} <- merge_schema(cluster_nodes)
     do
-      Logger.info("Node #{inspect(node)} joined Mnesia cluster #{inspect(nodes)}")
-    else
-      {:timeout, [@caches]} ->
-        Logger.warning("Forcing the load of Mnesia table: #{inspect(@caches)}")
-        mnesia_wrap(Mnesia.force_load_table(@caches))
-      error ->
-        Logger.error("Unable to join Mnesia cluster, error: #{inspect(error)}")
-        error
+      :ok
+    end
+  end
+
+  # Merge this node's Mnesia schema with the one of the cluster nodes.
+  #
+  # A node which ran standalone converted its schema to `disc_copies`, and two
+  # schemas persisted independently cannot be merged: Mnesia rejects the merge
+  # as they carry different cookies. Reverting this node's schema to
+  # `ram_copies` lets it adopt the one owned by the cluster. The schema is
+  # converted back to `disc_copies` once the merge succeeded.
+  #
+  # The schema is shared with the broker, which keeps its own tables in it even
+  # when Khepri is the metadata store, so it must never be deleted.
+  defp merge_schema(cluster_nodes) do
+    case Mnesia.change_config(:extra_db_nodes, cluster_nodes) do
+      {:error, {:merge_schema_failed, reason}} ->
+        Logger.warning("Mnesia schema merge failed, reverting the local " <>
+                       "schema in order to join nodes " <>
+                       "#{inspect(cluster_nodes)}. Reason: #{inspect(reason)}")
+
+        _ = Mnesia.delete_table(@caches)
+
+        with :ok <- mnesia_wrap(
+               Mnesia.change_table_copy_type(:schema, Node.self(), :ram_copies))
+        do
+          Mnesia.change_config(:extra_db_nodes, cluster_nodes)
+        end
+      result -> result
+    end
+  end
+
+  defp setup_caches_table(node) do
+    case Mnesia.create_table(@caches, []) do
+      {:aborted, {:already_exists, @caches}} ->
+        mnesia_wrap(Mnesia.add_table_copy(@caches, node, :ram_copies))
+      result -> mnesia_wrap(result)
     end
   end
 

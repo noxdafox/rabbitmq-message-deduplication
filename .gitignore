@@ -9,3 +9,11 @@ plugins
 GPATH
 GRTAGS
 GTAGS
+ebin
+sbin
+sbin.lock
+escript
+escript.lock
+plugins.lock
+Mnesia.*
+*.d
