@@ -75,6 +75,16 @@ defmodule RabbitMQMessageDeduplication.CacheManager do
     end
   end
 
+  @doc """
+  List the caches registered within the maintenance process.
+  """
+  @spec caches() :: list
+  def caches() do
+    {:atomic, caches} = Mnesia.transaction(fn -> Mnesia.all_keys(@caches) end)
+
+    caches
+  end
+
   ## Server Callbacks
 
   # Initialize Mnesia backend and start maintenance routine
@@ -91,8 +101,10 @@ defmodule RabbitMQMessageDeduplication.CacheManager do
   def terminate(reason, state) do
     Logger.debug("Terminating Cache Manager, reason: #{inspect(reason)}")
 
-    {:ok, _} = Mnesia.unsubscribe(:system)
-    # Stop Mnesia asynchronously to avoid deadlocks during process termination
+    # Mnesia might be already stopped when the broker shuts down
+    _ = Mnesia.unsubscribe(:system)
+    # Ensure Mnesia is stopped.
+    # Do it asynchronously to avoid deadlocks during process termination
     if state.managed_mnesia, do: spawn(fn() -> Mnesia.stop() end)
   end
 
@@ -130,8 +142,7 @@ defmodule RabbitMQMessageDeduplication.CacheManager do
     Mnesia.subscribe(:system)
 
     # Remove expired entries from all caches
-    {:atomic, caches} = Mnesia.transaction(fn -> Mnesia.all_keys(@caches) end)
-    Enum.each(caches, &Cache.delete_expired_entries/1)
+    Enum.each(caches(), &Cache.delete_expired_entries/1)
 
     Process.send_after(__MODULE__, :maintenance, Common.maintenance_period())
 
@@ -140,8 +151,7 @@ defmodule RabbitMQMessageDeduplication.CacheManager do
 
   # On node addition distribute cache tables
   def handle_info({:mnesia_system_event, {:mnesia_up, _}}, state) do
-    {:atomic, caches} = Mnesia.transaction(fn -> Mnesia.all_keys(@caches) end)
-    Enum.each(caches, &Cache.rebalance_replicas/1)
+    Enum.each(caches(), &Cache.rebalance_replicas/1)
 
     {:noreply, state}
   end
@@ -274,8 +284,7 @@ defmodule RabbitMQMessageDeduplication.CacheManager do
 
   # Find distributed Mnesia tables located on this node.
   defp find_split_tables(node) do
-    Mnesia.transaction(fn -> Mnesia.all_keys(@caches) end)
-    |> elem(1)
+    caches()
     |> Enum.filter(fn(table) -> Cache.option(table, :distributed) end)
     |> Enum.filter(fn(table) -> node in table_copies(table) end)
   end

@@ -48,7 +48,7 @@ defmodule RabbitMQMessageDeduplication.Exchange do
                      [{:description, "exchange type x-message-deduplication"},
                       {:mfa, {__MODULE__, :register, []}},
                       {:cleanup, {__MODULE__, :unregister, []}},
-                      {:requires, :rabbit_registry},
+                      {:requires, [:rabbit_registry, CacheManager]},
                       {:enables, :kernel_ready}]}
 
   defrecord :exchange, extract(
@@ -260,8 +260,11 @@ defmodule RabbitMQMessageDeduplication.Exchange do
   defp maybe_reconfigure_caches() do
     Logger.debug("Deduplication Exchanges startup, reconfiguring old caches")
 
+    # `rabbit_exchange` stores the exchange type as an atom
+    type = RabbitRegistry.binary_to_type(@exchange_type)
+
     RabbitExchange.list()
-    |> Enum.filter(fn(exchange(name: type)) -> type == @exchange_type end)
+    |> Enum.filter(fn(exchange(type: exchange_type)) -> exchange_type == type end)
     |> Enum.map(fn(exchange) -> create(:none, exchange) end)
 
     :ok
